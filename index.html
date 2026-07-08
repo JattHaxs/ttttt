@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Editentia</title>
+<meta name="description" content="Editentia — the monthly transmission for hyper-paced 3D content creators. Blender mastery, algorithm science, and a system that ships. $78/month.">
+<link rel="icon" href="https://res.cloudinary.com/dl7vrgenz/image/upload/v1747967163/ghummaneditor_h0v1sk.png" type="image/png">
+<link rel="apple-touch-icon" href="https://res.cloudinary.com/dl7vrgenz/image/upload/v1747967163/ghummaneditor_h0v1sk.png">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          void: '#08090b',
+          panel: '#0e1114',
+          panel2: '#14181c',
+          cyan: {
+            DEFAULT: '#00f5ff',
+            dim: '#0aa8b3',
+            deep: '#043b40'
+          },
+          violet: '#7c5cff',
+          ink: '#e6f6f7',
+          muted: '#7a8a90'
+        },
+        fontFamily: {
+          display: ['Unbounded', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+          body: ['Inter', 'sans-serif']
+        }
+      }
+    }
+  }
+</script>
+
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<style>
+  :root{
+    --void:#08090b;
+    --panel:#0e1114;
+    --panel2:#14181c;
+    --cyan:#00f5ff;
+    --cyan-dim:#0aa8b3;
+    --cyan-deep:#043b40;
+    --violet:#7c5cff;
+    --ink:#e6f6f7;
+    --muted:#7a8a90;
+    --line: rgba(0,245,255,0.14);
+  }
+
+  *{ scrollbar-width: thin; scrollbar-color: var(--cyan-dim) var(--void); }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-track{ background: var(--void); }
+  ::-webkit-scrollbar-thumb{ background: var(--cyan-deep); border-radius: 0; }
+  ::-webkit-scrollbar-thumb:hover{ background: var(--cyan-dim); }
+
+  html{ scroll-behavior:smooth; background:var(--void); }
+  body{
+    background: var(--void);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    overflow-x:hidden;
+    cursor:none;
+  }
+  @media (max-width: 900px){ body{ cursor:auto; } }
+
+  ::selection{ background: var(--cyan); color:#000; }
+
+  /* ---------- Custom cursor ---------- */
+  .cursor-dot, .cursor-ring{
+    position:fixed; top:0; left:0; pointer-events:none; z-index:9999;
+    transform:translate(-50%,-50%);
+    mix-blend-mode: difference;
+  }
+  .cursor-dot{ width:5px; height:5px; background:var(--cyan); border-radius:50%; }
+  .cursor-ring{ width:34px; height:34px; border:1px solid var(--cyan); border-radius:50%; transition: width .25s, height .25s, border-color .25s, background .25s; }
+  .cursor-ring.active{ width:64px; height:64px; background: rgba(0,245,255,0.08); }
+  @media (max-width:900px){ .cursor-dot,.cursor-ring{ display:none; } }
+
+  /* ---------- Atmosphere overlays ---------- */
+  .scanlines{
+    position:fixed; inset:0; z-index:60; pointer-events:none; opacity:.5;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,0.018) 0px, rgba(255,255,255,0.018) 1px, transparent 1px, transparent 3px);
+  }
+  .vignette{
+    position:fixed; inset:0; z-index:59; pointer-events:none;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.55) 100%);
+  }
+  .grain{
+    position:fixed; inset:0; z-index:58; pointer-events:none; opacity:.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ---------- Type helpers ---------- */
+  .font-display{ font-family:'Unbounded', sans-serif; }
+  .font-mono{ font-family:'JetBrains Mono', monospace; }
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size:.72rem; letter-spacing:.28em; text-transform:uppercase; color:var(--cyan);
+    display:flex; align-items:center; gap:.6rem;
+  }
+  .eyebrow::before{ content:''; width:22px; height:1px; background:var(--cyan); display:inline-block; }
+
+  .text-gradient{
+    background: linear-gradient(100deg, var(--ink) 30%, var(--cyan) 55%, var(--violet) 78%, var(--ink) 100%);
+    background-size: 300% 100%;
+    -webkit-background-clip:text; background-clip:text;
+    color:transparent; -webkit-text-fill-color:transparent;
+    animation: sheen 9s linear infinite;
+  }
+  /* Fallback: if a browser can't clip the gradient to text, still show solid readable text instead of nothing */
+  @supports not ((-webkit-background-clip: text) or (background-clip: text)){
+    .text-gradient{
+      background: none;
+      color: var(--cyan);
+      -webkit-text-fill-color: currentColor;
+      animation: none;
+    }
+  }
+  @keyframes sheen{ 0%{ background-position: 0% 0;} 100%{ background-position: 300% 0;} }
+
+  /* ---------- Hairline structure ---------- */
+  .hair-top{ border-top:1px solid var(--line); }
+  .hair-b{ border-bottom:1px solid var(--line); }
+  .panel-card{
+    background: linear-gradient(180deg, rgba(20,24,28,.6), rgba(14,17,20,.5));
+    border:1px solid var(--line);
+    backdrop-filter: blur(6px);
+  }
+
+  /* ---------- Glitch headline ---------- */
+  .glitch-wrap{ position:relative; display:inline-block; }
+  .glitch-wrap .g-layer{
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    color: var(--cyan); opacity:0; mix-blend-mode: screen;
+  }
+  .glitch-wrap:hover .g-layer{ animation: glitchmove .38s steps(2,end) 1; opacity:.7; }
+  .glitch-wrap .g-layer.g2{ color: var(--violet); }
+  @keyframes glitchmove{
+    0%{ transform:translate(0,0); clip-path: inset(0 0 90% 0); }
+    20%{ transform:translate(-3px,2px); clip-path: inset(10% 0 70% 0);}
+    40%{ transform:translate(3px,-2px); clip-path: inset(40% 0 30% 0);}
+    60%{ transform:translate(-2px,-1px); clip-path: inset(70% 0 5% 0);}
+    80%{ transform:translate(2px,1px); clip-path: inset(20% 0 60% 0);}
+    100%{ transform:translate(0,0); clip-path: inset(0 0 100% 0); opacity:0;}
+  }
+
+  /* ---------- Reveal on scroll ---------- */
+  .reveal{ opacity:0; transform: translateY(28px); transition: opacity .9s cubic-bezier(.16,1,.3,1), transform .9s cubic-bezier(.16,1,.3,1); }
+  .reveal.in{ opacity:1; transform:translateY(0); }
+
+  /* ---------- Buttons ---------- */
+  .btn-primary{
+    position:relative; overflow:hidden;
+    font-family:'JetBrains Mono', monospace; font-size:.82rem; letter-spacing:.12em;
+    background:var(--cyan); color:#04191b;
+    padding: 1rem 2rem;
+    font-weight:600;
+    transition: transform .35s cubic-bezier(.16,1,.3,1), box-shadow .35s;
+    box-shadow: 0 0 0 rgba(0,245,255,0);
+  }
+  .btn-primary:hover{ box-shadow: 0 0 40px rgba(0,245,255,.35); }
+  .btn-primary::before{
+    content:''; position:absolute; inset:0; left:-120%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent);
+    transition: left .6s ease;
+  }
+  .btn-primary:hover::before{ left:120%; }
+
+  .btn-ghost{
+    font-family:'JetBrains Mono', monospace; font-size:.82rem; letter-spacing:.12em;
+    border:1px solid var(--line); color:var(--ink);
+    padding: 1rem 2rem;
+    transition: border-color .3s, background .3s;
+  }
+  .btn-ghost:hover{ border-color: var(--cyan); background: rgba(0,245,255,.05); }
+
+  .magnetic{ will-change: transform; }
+
+  /* ---------- Nav ---------- */
+  #nav{ transition: padding .4s ease, background .4s ease, border-color .4s ease; }
+  #nav.scrolled{ background: rgba(8,9,11,.78); backdrop-filter: blur(14px); border-color: var(--line); }
+  .nav-link{ position:relative; }
+  .nav-link::after{
+    content:''; position:absolute; left:0; bottom:-4px; width:0; height:1px; background:var(--cyan);
+    transition: width .3s ease;
+  }
+  .nav-link:hover::after{ width:100%; }
+
+  /* ---------- HUD ring text ---------- */
+  .hud-ring{ animation: spin 40s linear infinite; transform-origin: 50% 50%; }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  /* ---------- Curriculum details ---------- */
+  details.phase{ border-top:1px solid var(--line); }
+  details.phase:last-child{ border-bottom:1px solid var(--line); }
+  details.phase summary{ list-style:none; cursor:pointer; }
+  details.phase summary::-webkit-details-marker{ display:none; }
+  details.phase .chev{ transition: transform .35s ease; }
+  details.phase[open] .chev{ transform: rotate(45deg); }
+  details.phase .phase-body{
+    max-height:0; overflow:hidden; transition: max-height .5s ease, padding .5s ease, opacity .4s ease;
+    opacity:0;
+  }
+  details.phase[open] .phase-body{ max-height:220px; opacity:1; }
+  details.phase summary{ transition: background .3s; }
+  details.phase:hover summary{ background: rgba(0,245,255,.03); }
+
+  /* ---------- Stat number ---------- */
+  .stat-num{ font-variant-numeric: tabular-nums; }
+
+  /* ---------- Pricing card ---------- */
+  .price-card{ position:relative; }
+  .price-card::before{
+    content:''; position:absolute; inset:-1px;
+    background: conic-gradient(from 0deg, var(--cyan), var(--violet), transparent 40%, transparent 60%, var(--cyan));
+    z-index:-1; filter: blur(0px);
+    animation: spin 6s linear infinite;
+    opacity:.55;
+  }
+  .price-inner{ background: #0b0d10; }
+
+  /* ---------- Marquee ---------- */
+  .marquee-track{ display:flex; width:max-content; animation: marquee 34s linear infinite; }
+  @keyframes marquee{ from{ transform:translateX(0);} to{ transform:translateX(-50%);} }
+
+  /* ---------- Bonus card glow ---------- */
+  .bonus-card{ position:relative; overflow:hidden; }
+  .bonus-card .glow{
+    position:absolute; width:260px; height:260px; border-radius:50%;
+    background: radial-gradient(circle, rgba(0,245,255,.16), transparent 70%);
+    top:-100px; right:-100px; pointer-events:none;
+  }
+
+  canvas#hero-canvas{ position:absolute; inset:0; width:100%; height:100%; }
+
+  h1,h2,h3{ letter-spacing:-.01em; }
+
+  .noise-btn:focus-visible, a:focus-visible, button:focus-visible, summary:focus-visible{
+    outline: 2px solid var(--cyan); outline-offset:3px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.001s !important; animation-iteration-count:1 !important; transition-duration:.001s !important; }
+  }
+</style>
+</head>
+<body class="antialiased">
+
+<div class="cursor-dot" id="cdot"></div>
+<div class="cursor-ring" id="cring"></div>
+<div class="scanlines"></div>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<!-- ============ NAV ============ -->
+<nav id="nav" class="fixed top-0 left-0 right-0 z-50 border-b border-transparent">
+  <div class="max-w-[1400px] mx-auto px-6 md:px-10 flex items-center justify-between h-20">
+    <a href="#top" class="flex items-center gap-3 magnetic">
+      <img src="https://res.cloudinary.com/dl7vrgenz/image/upload/v1747967163/ghummaneditor_h0v1sk.png" alt="Editentia" class="h-8 w-auto">
+      <span class="font-mono text-[11px] tracking-[.28em] text-muted hidden sm:block">// EST. 2019</span>
+    </a>
+    <div class="hidden lg:flex items-center gap-10 font-mono text-[12px] tracking-[.14em] uppercase text-ink/80">
+      <a href="#curriculum" class="nav-link">Curriculum</a>
+      <a href="#outcomes" class="nav-link">Outcomes</a>
+      <a href="#bonuses" class="nav-link">Bonuses</a>
+      <a href="#pricing" class="nav-link">Pricing</a>
+      <a href="#faq" class="nav-link">FAQ</a>
+    </div>
+    <a href="https://www.skool.com/editentia-1115" target="_blank" class="btn-primary magnetic hidden md:inline-block">JOIN — $78/MO</a>
+    <a href="https://www.skool.com/editentia-1115" target="_blank" class="md:hidden font-mono text-[11px] text-cyan tracking-widest border border-cyan/40 px-3 py-2">JOIN</a>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section id="top" class="relative min-h-[100svh] flex flex-col justify-between overflow-hidden hair-b">
+  <canvas id="hero-canvas"></canvas>
+  <div class="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-void pointer-events-none"></div>
+
+  <div class="relative z-10 max-w-[1400px] mx-auto px-6 md:px-10 pt-40 md:pt-44 w-full">
+    <p class="eyebrow mb-8 reveal">TRANSMISSION ACTIVE // FREQUENCY OPEN TO NEW OPERATORS</p>
+
+    <h1 class="font-display font-extrabold leading-[0.98] text-[13vw] sm:text-[9vw] md:text-[6.4vw] reveal">
+      <span class="glitch-wrap">
+        <span class="relative z-10">3D CONTENT,</span>
+        <span class="g-layer" aria-hidden="true">3D CONTENT,</span>
+        <span class="g-layer g2" aria-hidden="true">3D CONTENT,</span>
+      </span><br>
+      <span class="glitch-wrap text-gradient">
+        <span class="relative z-10">AT THE SPEED</span>
+      </span><br>
+      <span class="glitch-wrap">
+        <span class="relative z-10">OF ATTENTION.</span>
+        <span class="g-layer" aria-hidden="true">OF ATTENTION.</span>
+        <span class="g-layer g2" aria-hidden="true">OF ATTENTION.</span>
+      </span>
+    </h1>
+
+    <div class="mt-10 md:mt-12 flex flex-col md:flex-row md:items-end justify-between gap-8 reveal">
+      <p class="font-body text-base md:text-lg text-muted max-w-md leading-relaxed">
+        Editentia is a monthly transmission for creators who build worlds instead of cutting streamer clips or AI Slop!
+        Blender fluency, algorithmic instinct, and a shipping system, delivered live.
+      </p>
+      <div class="flex flex-wrap gap-4">
+        <a href="https://www.skool.com/editentia-1115" target="_blank" class="btn-primary magnetic">ENTER EDITENTIA — $78/MO</a>
+        <a href="#curriculum" class="btn-ghost magnetic">VIEW CURRICULUM</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- live readout ticker -->
+  <div class="relative z-10 border-t border-line/60 mt-16">
+    <div class="max-w-[1400px] mx-auto px-6 md:px-10 py-4 flex flex-wrap gap-x-10 gap-y-2 font-mono text-[11px] tracking-[.14em] text-muted uppercase">
+      <span>OPERATORS ONLINE: <span class="text-cyan stat-num" data-count="100" data-suffix="">0</span></span>
+      <span>CLIPS SHIPPED / MO: <span class="text-cyan stat-num" data-count="908" data-suffix="">0</span></span>
+      <span>AVG VIEWS / CLIP: <span class="text-cyan stat-num" data-count="486" data-suffix="K">0</span></span>
+      <span class="hidden md:inline">STATUS: <span class="text-cyan">TRANSMITTING</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MANIFESTO ============ -->
+<section class="relative py-28 md:py-40 hair-b">
+  <div class="max-w-[1400px] mx-auto px-6 md:px-10">
+    <p class="eyebrow reveal">SIGNAL 00 — THE SHIFT</p>
+    <blockquote class="mt-8 font-display text-[7.5vw] sm:text-[4.4vw] md:text-[2.9vw] leading-[1.15] max-w-5xl reveal">
+      Short-form used to mean cliping streamers or mass produce A.I Slop.
+      In <span class="text-cyan">2026</span> it means rendering entire worlds —
+      built, lit, and cut fast enough to earn
+      <span class="text-violet">three seconds</span> of a stranger's attention.
+      <span class="text-muted">Most creators are still trimming clips.</span>
+      Ours are shipping universes While earning. <span class="text-cyan">Daily.</span>
+    </blockquote>
+  </div>
+</section>
+
+<!-- ============ CURRICULUM ============ -->
+<section id="curriculum" class="relative py-28 md:py-40 hair-b">
+  <div class="max-w-[1400px] mx-auto px-6 md:px-10">
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
+      <div class="reveal">
+        <p class="eyebrow">SIGNAL 01 — THE CURRICULUM</p>
+        <h2 class="font-display font-bold text-4xl md:text-6xl mt-6">Nine phases.<br>One shipping system.</h2>
+      </div>
+      <p class="font-mono text-[12px] text-muted max-w-xs reveal">Delivered as a living vault — live sessions, recorded drops, and critique, released in sequence and open forever.</p>
+    </div>
+
+    <div class="reveal">
+      <!-- Phase 00 -->
+      <details class="phase group" open>
+        <summary class="flex items-center justify-between py-7 md:py-8 gap-6">
+          <div class="flex items-center gap-6 md:gap-10">
+            <span class="font-mono text-cyan text-sm w-10">00</span>
+            <span class="font-display text-xl md:text-3xl">Blender From Zero</span>
+          </div>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pl-16 md:pl-[6.5rem] pb-8 pr-4 text-muted font-body leading-relaxed max-w-2xl">
+          No theory lectures, no 40-minute UI tours. Practical, muscle-memory Blender : modeling, shading, lighting and rendering, taught only through the moves you'll actually use to ship a clip ASAP.
+        </div>
+      </details>
+      <!-- Phase 01 -->
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 md:py-8 gap-6">
+          <div class="flex items-center gap-6 md:gap-10">
+            <span class="font-mono text-cyan text-sm w-10">01</span>
+            <span class="font-display text-xl md:text-3xl">The Idea Engine</span>
+          </div>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pl-16 md:pl-[6.5rem] pb-8 pr-4 text-muted font-body leading-relaxed max-w-2xl">
+          A repeatable system for generating VIRAL concepts on demand. reading trends before they peak, and turning a single prompt into a week of content instead of one clip.
+        </div>
+      </details>
+      <!-- Phase 02 -->
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 md:py-8 gap-6">
+          <div class="flex items-center gap-6 md:gap-10">
+            <span class="font-mono text-cyan text-sm w-10">02</span>
+            <span class="font-display text-xl md:text-3xl">Scripting the Hook</span>
+          </div>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pl-16 md:pl-[6.5rem] pb-8 pr-4 text-muted font-body leading-relaxed max-w-2xl">
+          Writing for retention: structure, pacing and the first-second hook, built specifically for hyper-paced 3D formats rather than generic copywriting rules.
+        </div>
+      </details>
+      <!-- Phase 03 -->
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 md:py-8 gap-6">
+          <div class="flex items-center gap-6 md:gap-10">
+            <span class="font-mono text-cyan text-sm w-10">03</span>
+            <span class="font-display text-xl md:text-3xl">Animation at Velocity</span>
+          </div>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pl-16 md:pl-[6.5rem] pb-8 pr-4 text-muted font-body leading-relaxed max-w-2xl">
+          Core animation principles compressed for speed — timing, weight and appeal, applied to short clips you can finish in a single sitting.
+        </div>
+      </details>
+      <!-- Phase 04 -->
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 md:py-8 gap-6">
+          <div class="flex items-center gap-6 md:gap-10">
+            <span class="font-mono text-cyan text-sm w-10">04</span>
+            <span class="font-display text-xl md:text-3xl">Post-Production Lab</span>
+          </div>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pl-16 md:pl-[6.5rem] pb-8 pr-4 text-muted font-body leading-relaxed max-w-2xl">
+          Grading, sound design and rhythm-editing techniques that give a render its final polish — the difference between "finished" and "shareable."
+        </div>
+      </details>
+      <!-- Phase 05 -->
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 md:py-8 gap-6">
+          <div class="flex items-center gap-6 md:gap-10">
+            <span class="font-mono text-cyan text-sm w-10">05</span>
+            <span class="font-display text-xl md:text-3xl">The Algorithm, Decoded</span>
+          </div>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pl-16 md:pl-[6.5rem] pb-8 pr-4 text-muted font-body leading-relaxed max-w-2xl">
+          How distribution actually works across platforms — posting cadence, retention curves, and the signals that push a clip from hundreds of views to millions.
+        </div>
+      </details>
+      <!-- Phase 06 -->
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 md:py-8 gap-6">
+          <div class="flex items-center gap-6 md:gap-10">
+            <span class="font-mono text-cyan text-sm w-10">06</span>
+            <span class="font-display text-xl md:text-3xl">Reconstruction Lab</span>
+          </div>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pl-16 md:pl-[6.5rem] pb-8 pr-4 text-muted font-body leading-relaxed max-w-2xl">
+          Forensic breakdowns of viral 3D animations (Mainly from Zack D. & Fern.) — reverse-engineering the technique, timing and camera work so you can rebuild the craft, not just the trend.
+        </div>
+      </details>
+      <!-- Phase 07 -->
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 md:py-8 gap-6">
+          <div class="flex items-center gap-6 md:gap-10">
+            <span class="font-mono text-cyan text-sm w-10">07</span>
+            <span class="font-display text-xl md:text-3xl">The Consistency Engine</span>
+          </div>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pl-16 md:pl-[6.5rem] pb-8 pr-4 text-muted font-body leading-relaxed max-w-2xl">
+          Pipelines and batching systems built for people with a job, a degree, or both — so posting daily doesn't cost you your week, libido or your sanity.
+        </div>
+      </details>
+      <!-- Phase 08 -->
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 md:py-8 gap-6">
+          <div class="flex items-center gap-6 md:gap-10">
+            <span class="font-mono text-cyan text-sm w-10">08</span>
+            <span class="font-display text-xl md:text-3xl">Monetization Protocols</span>
+          </div>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pl-16 md:pl-[6.5rem] pb-8 pr-4 text-muted font-body leading-relaxed max-w-2xl">
+          Two income tracks taught side by side — landing and pricing freelance 3D work, and building a personal channel that pays through audience, sponsorship and product.
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ OUTCOMES ============ -->
+<section id="outcomes" class="relative py-28 md:py-40 hair-b">
+  <div class="max-w-[1400px] mx-auto px-6 md:px-10">
+    <p class="eyebrow reveal">SIGNAL 02 — WHAT OPERATORS BECOME</p>
+    <h2 class="font-display font-bold text-4xl md:text-6xl mt-6 max-w-3xl reveal">Proof, not promises.</h2>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-px bg-line mt-16 reveal">
+      <div class="panel-card !border-0 bg-void p-8 md:p-10">
+        <div class="font-display text-4xl md:text-5xl text-cyan stat-num" data-count="100">0</div>
+        <p class="font-mono text-[11px] tracking-widest text-muted uppercase mt-3">Active operators</p>
+      </div>
+      <div class="panel-card !border-0 bg-void p-8 md:p-10">
+        <div class="font-display text-4xl md:text-5xl text-cyan"><span class="stat-num" data-count="19">0</span>D</div>
+        <p class="font-mono text-[11px] tracking-widest text-muted uppercase mt-3">Zero to first produced high quality clip</p>
+      </div>
+      <div class="panel-card !border-0 bg-void p-8 md:p-10">
+        <div class="font-display text-4xl md:text-5xl text-cyan"><span class="stat-num" data-count="32">0</span>M</div>
+        <p class="font-mono text-[11px] tracking-widest text-muted uppercase mt-3">Combined monthly views</p>
+      </div>
+      <div class="panel-card !border-0 bg-void p-8 md:p-10">
+        <div class="font-display text-4xl md:text-5xl text-cyan"><span class="stat-num" data-count="9">0</span></div>
+        <p class="font-mono text-[11px] tracking-widest text-muted uppercase mt-3">Phases in the vault + 4 Extra Bonuses</p>
+      </div>
+    </div>
+
+    <!-- marquee of member callsigns -->
+    <div class="mt-20 overflow-hidden reveal">
+      <p class="font-mono text-[11px] tracking-widest text-muted uppercase mb-6">FEEDBACK from fellow Editentians.</p>
+      <div class="marquee-track">
+        <div class="flex gap-6 pr-6">
+          <div class="panel-card px-6 py-5 min-w-[300px]"><p class="font-mono text-cyan text-xs mb-2">@cy****render</p><p class="text-sm text-muted">"Went from tutorials to a booked freelance queue in one quarter."</p></div>
+          <div class="panel-card px-6 py-5 min-w-[300px]"><p class="font-mono text-cyan text-xs mb-2">@ne0n****e</p><p class="text-sm text-muted">"The Consistency Engine is the only reason I still post daily."</p></div>
+          <div class="panel-card px-6 py-5 min-w-[300px]"><p class="font-mono text-cyan text-xs mb-2">@va****lck</p><p class="text-sm text-muted">"Reconstruction Lab rebuilt my eye for timing completely."</p></div>
+          <div class="panel-card px-6 py-5 min-w-[300px]"><p class="font-mono text-cyan text-xs mb-2">@dr****re</p><p class="text-sm text-muted">"Full-time job, three clips a week, still sane. Barely."</p></div>
+        </div>
+        <div class="flex gap-6 pr-6" aria-hidden="true">
+          <div class="panel-card px-6 py-5 min-w-[300px]"><p class="font-mono text-cyan text-xs mb-2">@cy****render</p><p class="text-sm text-muted">"Went from tutorials to a booked freelance queue in one quarter."</p></div>
+          <div class="panel-card px-6 py-5 min-w-[300px]"><p class="font-mono text-cyan text-xs mb-2">@ne0n****e</p><p class="text-sm text-muted">"The Consistency Engine is the only reason I still post daily."</p></div>
+          <div class="panel-card px-6 py-5 min-w-[300px]"><p class="font-mono text-cyan text-xs mb-2">@va****lck</p><p class="text-sm text-muted">"Reconstruction Lab rebuilt my eye for timing completely."</p></div>
+          <div class="panel-card px-6 py-5 min-w-[300px]"><p class="font-mono text-cyan text-xs mb-2">@dr****re</p><p class="text-sm text-muted">"Full-time job, three clips a week, still sane. Barely."</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BONUSES ============ -->
+<section id="bonuses" class="relative py-28 md:py-40 hair-b">
+  <div class="max-w-[1400px] mx-auto px-6 md:px-10">
+    <p class="eyebrow reveal">SIGNAL 03 — SHIPPED WITH ENROLLMENT</p>
+    <h2 class="font-display font-bold text-4xl md:text-6xl mt-6 max-w-3xl reveal">Four bonuses. Zero extra cost.</h2>
+
+    <div class="grid md:grid-cols-2 gap-px bg-line mt-16 reveal">
+      <div class="bonus-card panel-card !border-0 bg-void p-10 md:p-14">
+        <div class="glow"></div>
+        <span class="font-mono text-[11px] text-cyan tracking-widest uppercase">Bonus 01</span>
+        <h3 class="font-display text-2xl md:text-3xl mt-4">All Blender project files of My own Videos</h3>
+        <p class="text-muted mt-4 leading-relaxed">Yes! as Unbelieveable it may sound, you'll have access to ALL of my blender Projects of my videos which you can use for your own channel, Free of any Copyright (as long as you are an editentia member).</p>
+      </div>
+      <div class="bonus-card panel-card !border-0 bg-void p-10 md:p-14">
+        <div class="glow"></div>
+        <span class="font-mono text-[11px] text-cyan tracking-widest uppercase">Bonus 02</span>
+        <h3 class="font-display text-2xl md:text-3xl mt-4">A custom sci-fi portfolio site</h3>
+        <p class="text-muted mt-4 leading-relaxed">Built for you, in this same visual language — a personal transmission that showcases your work the moment you're ready to be found.</p>
+      </div>
+      <div class="bonus-card panel-card !border-0 bg-void p-10 md:p-14">
+        <div class="glow"></div>
+        <span class="font-mono text-[11px] text-cyan tracking-widest uppercase">Bonus 03</span>
+        <h3 class="font-display text-2xl md:text-3xl mt-4">Professional HTML email templates</h3>
+        <p class="text-muted mt-4 leading-relaxed">A coded, responsive vault for outreach, newsletters and client pitches — ready to send the same day you land your first inquiry.</p>
+      </div>
+       <div class="bonus-card panel-card !border-0 bg-void p-10 md:p-14">
+        <div class="glow"></div>
+        <span class="font-mono text-[11px] text-cyan tracking-widest uppercase">Bonus 04</span>
+        <h3 class="font-display text-2xl md:text-3xl mt-4">Live calls and Q&A sessions regarding our course</h3>
+        <p class="text-muted mt-4 leading-relaxed">Every week we have a call where I answer all of the Questions or doubts students have, Alongside giving a honest critique and consructive critisicm (if any) on their channel and content.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRICING ============ -->
+<section id="pricing" class="relative py-28 md:py-40 hair-b">
+  <div class="max-w-[1400px] mx-auto px-6 md:px-10">
+    <div class="grid lg:grid-cols-2 gap-16 items-center">
+      <div class="reveal">
+        <p class="eyebrow">SIGNAL 04 — ACCESS</p>
+        <h2 class="font-display font-bold text-4xl md:text-6xl mt-6 leading-[1.05]">One frequency.<br>Cancel anytime.</h2>
+        <p class="text-muted mt-6 max-w-md leading-relaxed">No cohorts, no waitlists, <b>no upsells inside.</b> One membership, one price, the entire vault plus every phase we release from here forward. <b>ALL FOR ONE FIXED PRICE</b></p>
+      </div>
+
+      <div class="price-card p-[1px] reveal">
+        <div class="price-inner p-10 md:p-12">
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-[11px] tracking-widest text-cyan uppercase">Editentia Access</span>
+            <span class="font-mono text-[10px] tracking-widest text-muted uppercase">Monthly</span>
+          </div>
+          <div class="flex items-end gap-2 mt-8">
+            <span class="font-display text-6xl md:text-7xl">$78</span>
+            <span class="font-mono text-muted mb-2">/ month</span>
+          </div>
+          <ul class="mt-10 space-y-4 font-body text-sm">
+            <li class="flex gap-3"><span class="text-cyan">—</span>Full 9-phase curriculum vault, updated monthly</li>
+            <li class="flex gap-3"><span class="text-cyan">—</span>Weekly live sessions + direct critique</li>
+            <li class="flex gap-3"><span class="text-cyan">—</span>Private Skool community of active operators</li>
+            <li class="flex gap-3"><span class="text-cyan">—</span>Monthly project drops &amp; challenges</li>
+            <li class="flex gap-3"><span class="text-cyan">—</span>Bonus: custom sci-fi portfolio site</li>
+            <li class="flex gap-3"><span class="text-cyan">—</span>Bonus: professional HTML email template vault</li>
+          </ul>
+          <a href="https://www.skool.com/editentia-1115" target="_blank" class="btn-primary magnetic w-full text-center mt-10 block">JOIN THE TRANSMISSION</a>
+          <p class="font-mono text-[10px] text-muted text-center mt-4 tracking-widest uppercase">Instant access · No contracts</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq" class="relative py-28 md:py-40">
+  <div class="max-w-[1400px] mx-auto px-6 md:px-10">
+    <p class="eyebrow reveal">SIGNAL 05 — QUESTIONS</p>
+    <h2 class="font-display font-bold text-4xl md:text-6xl mt-6 mb-16 reveal">Before you enter, Here are a few commonly asked Questions.</h2>
+
+    <div class="max-w-3xl reveal">
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 gap-6">
+          <span class="font-display text-lg md:text-xl">Do I need prior Blender experience?</span>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pb-7 pr-10 text-muted font-body leading-relaxed"><b>None. Zero. </b>Phase 00 assumes zero prior knowledge and is built entirely around practical skills you'll use immediately, not theory you'll forget in 2 hours. Instead of Learning the whole software, you'll learn just enough to create the Best videos ASAP.</div>
+      </details>
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 gap-6">
+          <span class="font-display text-lg md:text-xl">How much time does this take weekly?</span>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pb-7 pr-10 text-muted font-body leading-relaxed">Most operators run 4–6 hours a week alongside full-time work or study. We understand it can be hard to manage these multiple things, so Phase 07 exists specifically to make This sustainable long-term.</div>
+      </details>
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 gap-6">
+          <span class="font-display text-lg md:text-xl">Where does the community live?</span>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pb-7 pr-10 text-muted font-body leading-relaxed">Inside a private Skool community — live sessions, the full curriculum vault, critique threads and project drops <b>in one place</b>, No need to juggle between hundreds of Google drive links like other courses.</div>
+      </details>
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 gap-6">
+          <span class="font-display text-lg md:text-xl">Can I cancel anytime?</span>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pb-7 pr-10 text-muted font-body leading-relaxed">Yes. It's a straightforward monthly membership : cancel whenever, no contracts, no retention calls or emails. We respect your decision and understand There could be many reasons to cancel your membership.</div>
+      </details>
+      <details class="phase group">
+        <summary class="flex items-center justify-between py-7 gap-6">
+          <span class="font-display text-lg md:text-xl">What hardware do I need?</span>
+          <span class="chev font-mono text-cyan text-2xl">+</span>
+        </summary>
+        <div class="phase-body pb-7 pr-10 text-muted font-body leading-relaxed">Any machine capable of running Blender comfortably. According to blender's official website : <b>4-core CPU, 8 GB of RAM, and 2 GB VRAM on your graphics card Atleast.</b> but We teach lightweight, render-efficient workflows built for speed, not high-end workstations.</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="relative py-20 border-t border-line">
+  <div class="max-w-[1400px] mx-auto px-6 md:px-10">
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-10">
+      <div>
+        <img src="https://res.cloudinary.com/dl7vrgenz/image/upload/v1747967163/ghummaneditor_h0v1sk.png" alt="Editentia" class="h-8 w-auto mb-6">
+        <p class="font-display text-2xl md:text-4xl max-w-lg leading-tight">The frequency is open.</p>
+        <a href="https://www.skool.com/editentia-1115" target="_blank" class="btn-primary magnetic inline-block mt-8">JOIN — $78/MO</a>
+      </div>
+      <div class="grid grid-cols-2 gap-x-16 gap-y-3 font-mono text-[12px] tracking-widest uppercase text-muted">
+        <a href="#curriculum" class="nav-link">Curriculum</a>
+        <a href="#outcomes" class="nav-link">Outcomes</a>
+        <a href="#bonuses" class="nav-link">Bonuses</a>
+        <a href="#pricing" class="nav-link">Pricing</a>
+        <a href="#faq" class="nav-link">FAQ</a>
+        <a href="https://www.instagram.com/gxhmman" target="_blank" class="nav-link">Contact Me</a>
+      </div>
+    </div>
+    <div class="mt-16 flex flex-col md:flex-row justify-between gap-4 font-mono text-[10px] tracking-widest text-muted uppercase">
+      <span>© 2019-2026 EDITENTIA — ALL TRANSMISSIONS RESERVED</span>
+      <span>SIGNAL STATUS: ONLINE</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ================= Custom cursor ================= */
+const cdot = document.getElementById('cdot');
+const cring = document.getElementById('cring');
+let mx=0,my=0, rx=0, ry=0;
+window.addEventListener('mousemove', e=>{
+  mx=e.clientX; my=e.clientY;
+  cdot.style.left = mx+'px'; cdot.style.top = my+'px';
+});
+function ringLoop(){
+  rx += (mx-rx)*0.16; ry += (my-ry)*0.16;
+  cring.style.left = rx+'px'; cring.style.top = ry+'px';
+  requestAnimationFrame(ringLoop);
+}
+ringLoop();
+document.querySelectorAll('a,button,summary,.magnetic').forEach(el=>{
+  el.addEventListener('mouseenter', ()=> cring.classList.add('active'));
+  el.addEventListener('mouseleave', ()=> cring.classList.remove('active'));
+});
+
+/* ================= Magnetic buttons ================= */
+document.querySelectorAll('.magnetic').forEach(el=>{
+  el.addEventListener('mousemove', e=>{
+    const r = el.getBoundingClientRect();
+    const relX = e.clientX - r.left - r.width/2;
+    const relY = e.clientY - r.top - r.height/2;
+    el.style.transform = `translate(${relX*0.18}px, ${relY*0.3}px)`;
+  });
+  el.addEventListener('mouseleave', ()=>{ el.style.transform = 'translate(0,0)'; });
+});
+
+/* ================= Nav shrink on scroll ================= */
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', ()=>{
+  if(window.scrollY > 40){ nav.classList.add('scrolled'); } else { nav.classList.remove('scrolled'); }
+});
+
+/* ================= Scroll reveal ================= */
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); } });
+},{ threshold:.15 });
+document.querySelectorAll('.reveal').forEach(el=> io.observe(el));
+
+/* ================= Animated counters ================= */
+const counters = document.querySelectorAll('.stat-num');
+const cio = new IntersectionObserver((entries)=>{
+  entries.forEach(en=>{
+    if(en.isIntersecting){
+      const el = en.target;
+      const target = parseInt(el.dataset.count,10);
+      const suffix = el.dataset.suffix || '';
+      const dur = 1600;
+      const start = performance.now();
+      function tick(now){
+        const p = Math.min((now-start)/dur, 1);
+        const eased = 1 - Math.pow(1-p, 3);
+        el.textContent = Math.floor(eased*target).toLocaleString() + suffix;
+        if(p<1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+      cio.unobserve(el);
+    }
+  });
+},{ threshold:.4 });
+counters.forEach(el=> cio.observe(el));
+
+/* ================= Three.js Data Core ================= */
+(function(){
+  const canvas = document.getElementById('hero-canvas');
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 100);
+  camera.position.z = 7;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  const group = new THREE.Group();
+  scene.add(group);
+
+  // Core icosahedron wireframe
+  const coreGeo = new THREE.IcosahedronGeometry(1.7, 1);
+  const coreMat = new THREE.MeshBasicMaterial({ color:0x00f5ff, wireframe:true, transparent:true, opacity:0.55 });
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  group.add(core);
+
+  // Inner solid-ish faint fill
+  const fillMat = new THREE.MeshBasicMaterial({ color:0x043b40, transparent:true, opacity:0.12 });
+  const fillMesh = new THREE.Mesh(coreGeo, fillMat);
+  group.add(fillMesh);
+
+  // Outer rings (torus)
+  const ringGeo1 = new THREE.TorusGeometry(2.6, 0.008, 8, 128);
+  const ringMat1 = new THREE.MeshBasicMaterial({ color:0x00f5ff, transparent:true, opacity:0.4 });
+  const ring1 = new THREE.Mesh(ringGeo1, ringMat1);
+  ring1.rotation.x = Math.PI/2.4;
+  group.add(ring1);
+
+  const ringGeo2 = new THREE.TorusGeometry(3.1, 0.006, 8, 128);
+  const ringMat2 = new THREE.MeshBasicMaterial({ color:0x7c5cff, transparent:true, opacity:0.3 });
+  const ring2 = new THREE.Mesh(ringGeo2, ringMat2);
+  ring2.rotation.x = Math.PI/1.6;
+  ring2.rotation.y = Math.PI/5;
+  group.add(ring2);
+
+  // Particle dust
+  const particleCount = 500;
+  const positions = new Float32Array(particleCount*3);
+  for(let i=0;i<particleCount;i++){
+    const r = 4 + Math.random()*5;
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos((Math.random()*2)-1);
+    positions[i*3] = r*Math.sin(phi)*Math.cos(theta);
+    positions[i*3+1] = r*Math.sin(phi)*Math.sin(theta);
+    positions[i*3+2] = r*Math.cos(phi);
+  }
+  const pGeo = new THREE.BufferGeometry();
+  pGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  const pMat = new THREE.PointsMaterial({ color:0x00f5ff, size:0.02, transparent:true, opacity:0.5 });
+  const particles = new THREE.Points(pGeo, pMat);
+  scene.add(particles);
+
+  let targetX=0, targetY=0;
+  window.addEventListener('mousemove', (e)=>{
+    targetX = (e.clientX/window.innerWidth - 0.5) * 0.6;
+    targetY = (e.clientY/window.innerHeight - 0.5) * 0.6;
+  });
+
+  function animate(){
+    requestAnimationFrame(animate);
+    core.rotation.y += 0.0025;
+    core.rotation.x += 0.0011;
+    fillMesh.rotation.copy(core.rotation);
+    ring1.rotation.z += 0.0016;
+    ring2.rotation.z -= 0.0012;
+    particles.rotation.y += 0.0004;
+
+    group.rotation.y += (targetX - group.rotation.y) * 0.02;
+    group.rotation.x += (-targetY - group.rotation.x) * 0.02;
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', ()=>{
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+})();
+</script>
+</body>
+</html>
