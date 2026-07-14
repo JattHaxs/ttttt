@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Composer</title>
+
+<link rel="icon" href="https://res.cloudinary.com/dl7vrgenz/image/upload/v1747967163/ghummaneditor_h0v1sk.png" type="image/png">
+<link rel="apple-touch-icon" href="https://res.cloudinary.com/dl7vrgenz/image/upload/v1747967163/ghummaneditor_h0v1sk.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<style>
+  :root{
+    --void:#08090b;
+    --panel:#0e1114;
+    --panel2:#14181c;
+    --cyan:#00f5ff;
+    --cyan-dim:#0aa8b3;
+    --cyan-deep:#043b40;
+    --violet:#7c5cff;
+    --ink:#e6f6f7;
+    --muted:#7a8a90;
+    --line: rgba(0,245,255,0.14);
+    --danger:#ff2e63;
+    --ok:#37e29a;
+    --radius:6px;
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; font-family:'JetBrains Mono', monospace; }
+  html{ background:var(--void); }
+
+  body{
+    background: var(--void);
+    color: var(--ink);
+    min-height:100vh;
+    overflow-x:hidden;
+    display:flex; justify-content:center; align-items:flex-start;
+    padding: 6vh 4vw 8vh;
+    cursor:none;
+  }
+  @media (max-width: 900px){ body{ cursor:auto; padding: 4vh 4vw; } }
+
+  ::selection{ background: var(--cyan); color:#000; }
+  *{ scrollbar-width: thin; scrollbar-color: var(--cyan-dim) var(--void); }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-track{ background: var(--void); }
+  ::-webkit-scrollbar-thumb{ background: var(--cyan-deep); border-radius:0; }
+
+  .cursor-dot, .cursor-ring{
+    position:fixed; top:0; left:0; pointer-events:none; z-index:9999;
+    transform:translate(-50%,-50%); mix-blend-mode:difference;
+  }
+  .cursor-dot{ width:5px; height:5px; background:var(--cyan); border-radius:50%; }
+  .cursor-ring{ width:32px; height:32px; border:1px solid var(--cyan); border-radius:50%; transition: width .25s, height .25s, background .25s; }
+  .cursor-ring.active{ width:56px; height:56px; background: rgba(0,245,255,0.08); }
+  @media (max-width:900px){ .cursor-dot,.cursor-ring{ display:none; } }
+
+  .scanlines{
+    position:fixed; inset:0; z-index:60; pointer-events:none; opacity:.5;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,0.018) 0px, rgba(255,255,255,0.018) 1px, transparent 1px, transparent 3px);
+  }
+  .vignette{
+    position:fixed; inset:0; z-index:59; pointer-events:none;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.6) 100%);
+  }
+  .grain{
+    position:fixed; inset:0; z-index:58; pointer-events:none; opacity:.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  body::before{
+    content:""; position:fixed; inset:0; z-index:0; pointer-events:none; transition: background 1.2s ease;
+    background: radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cyan) 8%, transparent), transparent 45%),
+                radial-gradient(circle at 100% 100%, rgba(124,92,255,0.07), transparent 50%);
+  }
+
+  .font-display{ font-family:'Unbounded', sans-serif; }
+  .eyebrow{
+    font-size:.68rem; letter-spacing:.24em; text-transform:uppercase; color:var(--cyan);
+    display:flex; align-items:center; gap:.55rem; transition:color .4s;
+  }
+  .eyebrow::before{ content:''; width:18px; height:1px; background:var(--cyan); display:inline-block; transition:background .4s; }
+
+  .reveal{ opacity:0; transform:translateY(14px); animation: rise .7s cubic-bezier(.16,1,.3,1) forwards; }
+  @keyframes rise{ to{ opacity:1; transform:translateY(0); } }
+
+  #deck{ width:1320px; max-width:100%; position:relative; z-index:1; }
+
+  header#topbar{
+    display:flex; justify-content:space-between; align-items:flex-end; gap:20px;
+    padding-bottom:22px; margin-bottom:26px; border-bottom:1px solid var(--line);
+  }
+  #title{
+    font-size: clamp(1.5rem, 2.8vw, 2.2rem); font-weight:800; margin-top:8px;
+    color:var(--ink); text-shadow: 0 0 22px color-mix(in srgb, var(--cyan) 35%, transparent);
+    letter-spacing:-.01em; transition:text-shadow .4s;
+  }
+  #subline{ font-size:.72rem; color:var(--muted); margin-top:6px; letter-spacing:.02em; max-width:520px; line-height:1.5; }
+  #clockbox{ text-align:right; }
+  #time{ font-size:1.3rem; color:var(--cyan); font-weight:600; font-variant-numeric:tabular-nums; transition:color .4s; }
+  #date{ font-size:.68rem; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); margin-top:4px; }
+
+  #grid{ display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start; }
+  @media (max-width:980px){ #grid{ grid-template-columns:1fr; } #deck{ padding:0; } }
+
+  .panel{
+    background: linear-gradient(180deg, rgba(20,24,28,.6), rgba(14,17,20,.5));
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px; backdrop-filter: blur(6px); transition:border-color .4s;
+  }
+  .panel + .panel{ margin-top:18px; }
+  .panel-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+  .panel-head-left{ display:flex; align-items:center; gap:10px; }
+  .panel-head i{ color:var(--cyan); font-size:.85rem; transition:color .4s; }
+  .panel-head h3{ font-size:.72rem; letter-spacing:.2em; text-transform:uppercase; color:var(--ink); font-weight:600; }
+
+  .field{ margin-bottom:14px; }
+  .field:last-child{ margin-bottom:0; }
+  .field label{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:.65rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+    margin-bottom:6px;
+  }
+  .field label span.hint{ text-transform:none; letter-spacing:0; color:var(--muted); opacity:.6; font-size:.62rem; }
+  .field select, .field input[type=number], .field input[type=text], .field textarea{
+    width:100%; padding:10px 12px; background:#04070a; border:1px solid var(--line); border-radius:var(--radius);
+    color:var(--ink); font-size:.78rem; outline:none; transition:border-color .2s; font-family:'JetBrains Mono', monospace;
+  }
+  .field textarea{ resize:vertical; min-height:64px; line-height:1.5; }
+  .field select:focus, .field input:focus, .field textarea:focus{ border-color:var(--cyan); }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .field-row3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+
+  .color-row{ display:flex; gap:10px; align-items:stretch; }
+  .color-row input[type=color]{
+    width:46px; height:40px; padding:0; border:1px solid var(--line); border-radius:var(--radius);
+    background:#04070a; cursor:pointer;
+  }
+  .color-row input[type=text]{ flex:1; }
+  .swatches{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  .swatch{
+    width:20px; height:20px; border-radius:4px; cursor:pointer; border:1px solid rgba(255,255,255,.12);
+    transition:transform .15s;
+  }
+  .swatch:hover{ transform:scale(1.15); }
+
+  .btn{
+    padding:11px 16px; background:#04070a; border:1px solid var(--line); border-radius:var(--radius);
+    color:var(--ink); cursor:pointer; font-size:.7rem; letter-spacing:.08em; text-transform:uppercase;
+    transition: border-color .25s, background .25s, color .25s; display:inline-flex; align-items:center; gap:8px;
+  }
+  .btn i{ color:var(--cyan); transition:color .4s; }
+  .btn:hover{ border-color:var(--cyan); background:color-mix(in srgb, var(--cyan) 6%, transparent); }
+  .btn-primary{ background:var(--cyan); color:#04191b; border:none; font-weight:600; }
+  .btn-primary i{ color:#04191b; }
+  .btn-primary:hover{ filter:brightness(1.1); background:var(--cyan); }
+  .btn-block{ width:100%; justify-content:center; }
+
+  #devicePreview{
+    font-size:.7rem; color:var(--muted); line-height:1.6; margin-top:10px; padding:12px;
+    background:#04070a; border:1px dashed var(--line); border-radius:var(--radius); min-height:40px;
+  }
+
+  #signal{
+    padding:26px 20px; border-radius:var(--radius); border:1px solid var(--line); background:#04070a;
+    text-align:center; overflow:hidden; position:relative; min-height:96px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #signalGlow{
+    position:absolute; inset:-40%; opacity:.5; filter:none; pointer-events:none;
+    background: radial-gradient(circle at 50% 50%, var(--cyan), transparent 60%);
+    animation: breathe 4s ease-in-out infinite;
+  }
+  @keyframes breathe{ 0%,100%{ transform:scale(1); opacity:.35; } 50%{ transform:scale(1.15); opacity:.55; } }
+  #signalText{
+    position:relative; font-family:'Unbounded', sans-serif; font-weight:700; font-size:clamp(1rem,2.4vw,1.6rem);
+    background: linear-gradient(180deg, #ffffff 0%, var(--cyan) 120%);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent;
+    letter-spacing:-.01em; line-height:1.3; padding:0 10px;
+  }
+
+  #outputPanel{ display:none; }
+  #outputPanel.show{ display:block; }
+  #promptOut{
+    width:100%; height:420px; resize:vertical; background:#04070a; border:1px solid var(--line);
+    border-radius:var(--radius); color:var(--ink); font-size:.72rem; line-height:1.55; padding:14px;
+    outline:none; white-space:pre-wrap;
+  }
+  #promptOut:focus{ border-color:var(--cyan); }
+
+  .toolbar{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .toast{
+    position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px); z-index:9998;
+    background:var(--panel2); border:1px solid var(--cyan); color:var(--ink); padding:10px 18px;
+    border-radius:var(--radius); font-size:.7rem; letter-spacing:.08em; text-transform:uppercase;
+    opacity:0; pointer-events:none; transition:opacity .3s, transform .3s;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .meta-row{ display:flex; gap:14px; margin-top:10px; flex-wrap:wrap; }
+  .meta-chip{
+    font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+    border:1px solid var(--line); border-radius:20px; padding:4px 10px; display:flex; align-items:center; gap:6px;
+  }
+  .meta-chip b{ color:var(--cyan); font-weight:600; transition:color .4s; }
+
+  footer{ margin-top:30px; text-align:center; font-size:.62rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="cursor-dot"></div>
+<div class="cursor-ring"></div>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+<div class="grain"></div>
+
+<div id="deck">
+
+  <header id="topbar" class="reveal">
+    <div>
+      <div class="eyebrow">Motion Forge · Prompt Composer</div>
+      <div id="title" class="font-display">Compose the cutaway brief</div>
+      <div id="subline">Fill in what's in your head — the line, the look, the numbers. Get back one clean, unambiguous prompt built to survive a literal-minded LLM.</div>
+    </div>
+    <div id="clockbox">
+      <div id="time">--:--:--</div>
+      <div id="date">-- --- ----</div>
+    </div>
+  </header>
+
+  <div id="grid">
+    <!-- LEFT: INPUTS -->
+    <div>
+      <div class="panel reveal" style="animation-delay:.05s">
+        <div class="panel-head">
+          <div class="panel-head-left"><i class="fa-solid fa-quote-left"></i><h3>The Line</h3></div>
+        </div>
+        <div class="field">
+          <label>What's the speaker saying right at this cutaway? <span class="hint">be literal</span></label>
+          <textarea id="fLine" placeholder="e.g. here's your 6 week roadmap">here's your 6 week roadmap</textarea>
+        </div>
+        <div class="field">
+          <label>Vibe / mood <span class="hint">optional — leave blank to let it decide</span></label>
+          <input type="text" id="fVibe" placeholder="e.g. energetic, premium, moody, minimal">
+        </div>
+      </div>
+
+      <div class="panel reveal" style="animation-delay:.1s">
+        <div class="panel-head">
+          <div class="panel-head-left"><i class="fa-solid fa-shapes"></i><h3>Visual Device</h3></div>
+        </div>
+        <div class="field">
+          <label>Pick the one primary device this clip is built around</label>
+          <select id="fDevice"></select>
+        </div>
+        <div id="devicePreview"></div>
+      </div>
+
+      <div class="panel reveal" style="animation-delay:.15s">
+        <div class="panel-head">
+          <div class="panel-head-left"><i class="fa-solid fa-palette"></i><h3>Color System</h3></div>
+        </div>
+        <div class="field">
+          <label>Accent color <span class="hint">drives everything — glow, edges, type</span></label>
+          <div class="color-row">
+            <input type="color" id="fColorPick" value="#00f5ff">
+            <input type="text" id="fColorHex" value="#00f5ff">
+          </div>
+          <div class="swatches" id="swatches"></div>
+        </div>
+      </div>
+
+      <div class="panel reveal" style="animation-delay:.2s">
+        <div class="panel-head">
+          <div class="panel-head-left"><i class="fa-solid fa-film"></i><h3>Render Spec</h3></div>
+        </div>
+        <div class="field">
+          <label>Resolution</label>
+          <select id="fResPreset">
+            <option value="1920x1080">1920×1080 — 16:9 landscape</option>
+            <option value="1080x1920">1080×1920 — 9:16 vertical / Reels</option>
+            <option value="1080x1080">1080×1080 — 1:1 square</option>
+            <option value="1280x720">1280×720 — 16:9 lightweight</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div class="field-row" id="customResRow" style="display:none;">
+          <div class="field"><label>Width (px)</label><input type="number" id="fW" value="1920" min="100"></div>
+          <div class="field"><label>Height (px)</label><input type="number" id="fH" value="1080" min="100"></div>
+        </div>
+        <div class="field-row3">
+          <div class="field"><label>FPS</label>
+            <select id="fFps">
+              <option value="24">24</option>
+              <option value="30" selected>30</option>
+              <option value="60">60</option>
+            </select>
+          </div>
+          <div class="field"><label>Duration (sec)</label><input type="number" id="fDuration" value="6" min="2" max="60" step="0.5"></div>
+          <div class="field"><label>Frames total</label><input type="text" id="fFramesOut" disabled></div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-block reveal" id="btnCompose" style="animation-delay:.25s; margin-top:4px; padding:14px;">
+        <i class="fa-solid fa-bolt"></i> Compose Prompt
+      </button>
+    </div>
+
+    <!-- RIGHT: SIGNAL PREVIEW + OUTPUT -->
+    <div>
+      <div class="panel reveal" style="animation-delay:.1s">
+        <div class="panel-head">
+          <div class="panel-head-left"><i class="fa-solid fa-satellite-dish"></i><h3>Signal Preview</h3></div>
+        </div>
+        <div id="signal">
+          <div id="signalGlow"></div>
+          <div id="signalText">here's your 6 week roadmap</div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-chip"><i class="fa-solid fa-shapes"></i> Device: <b id="metaDevice">—</b></div>
+          <div class="meta-chip"><i class="fa-solid fa-expand"></i> <b id="metaRes">1920×1080</b></div>
+          <div class="meta-chip"><i class="fa-solid fa-gauge"></i> <b id="metaFps">30fps</b></div>
+          <div class="meta-chip"><i class="fa-solid fa-clock"></i> <b id="metaDur">6.0s</b></div>
+        </div>
+      </div>
+
+      <div class="panel reveal" id="outputPanel" style="animation-delay:.15s">
+        <div class="panel-head">
+          <div class="panel-head-left"><i class="fa-solid fa-file-code"></i><h3>Final Prompt</h3></div>
+        </div>
+        <textarea id="promptOut" readonly></textarea>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="btnCopy"><i class="fa-solid fa-copy"></i> Copy Prompt</button>
+          <button class="btn" id="btnDownload"><i class="fa-solid fa-download"></i> Download .txt</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Motion Forge — one clip, one device, no ambiguity left for the model to guess at</footer>
+</div>
+
+<div class="toast" id="toast">Copied to clipboard</div>
+
+<script>
+/* ============ cursor ============ */
+const dot = document.querySelector('.cursor-dot');
+const ring = document.querySelector('.cursor-ring');
+let mx=0,my=0,rx=0,ry=0;
+window.addEventListener('mousemove', e=>{ mx=e.clientX; my=e.clientY; dot.style.left=mx+'px'; dot.style.top=my+'px'; });
+(function loop(){ rx += (mx-rx)*0.18; ry += (my-ry)*0.18; ring.style.left=rx+'px'; ring.style.top=ry+'px'; requestAnimationFrame(loop); })();
+document.querySelectorAll('button, select, input, textarea, a').forEach(el=>{
+  el.addEventListener('mouseenter', ()=>ring.classList.add('active'));
+  el.addEventListener('mouseleave', ()=>ring.classList.remove('active'));
+});
+
+/* ============ clock ============ */
+function tick(){
+  const d = new Date();
+  document.getElementById('time').textContent = d.toLocaleTimeString('en-GB');
+  document.getElementById('date').textContent = d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).toUpperCase();
+}
+tick(); setInterval(tick,1000);
+
+/* ============ live accent re-theme ============ */
+const swatchColors = ['#00f5ff','#7c5cff','#ff2b2b','#f5a623','#2be3c8','#ff2e63','#37e29a','#ffffff'];
+const swatchWrap = document.getElementById('swatches');
+swatchColors.forEach(c=>{
+  const s = document.createElement('div');
+  s.className='swatch'; s.style.background=c;
+  s.addEventListener('click', ()=> setAccent(c));
+  swatchWrap.appendChild(s);
+});
+function setAccent(hex){
+  document.documentElement.style.setProperty('--cyan', hex);
+  document.getElementById('fColorPick').value = hex;
+  document.getElementById('fColorHex').value = hex;
+  updateSignal();
+}
+document.getElementById('fColorPick').addEventListener('input', e=> setAccent(e.target.value));
+document.getElementById('fColorHex').addEventListener('input', e=>{
+  const v = e.target.value.trim();
+  if(/^#[0-9a-fA-F]{6}$/.test(v)) setAccent(v);
+});
+
+/* ============ device catalogue ============ */
+const DEVICES = {
+  auto: {
+    label: "Let the model pick the best fit",
+    preview: "The prompt will include the full device menu and instruct the model to choose exactly one and name its choice in a code comment.",
+    recipe: null
+  },
+  ghost_type: {
+    label: "Ghost-Outline Kinetic Type",
+    preview: "A huge outline-only duplicate of one key word sits large and centered behind a smaller, fully solid headline in a different weight. Best for a punchy spoken phrase or callback word.",
+    recipe: `PRIMARY DEVICE: Ghost-Outline Kinetic Type
+- Take the single most important word or short phrase from THE LINE.
+- Render it TWICE, stacked exactly on top of each other, both centered:
+  1) BACK COPY: same word, font-size ~2.2x the front copy, stroke only
+     (webkit-text-stroke: 2px ACCENT_COLOR, fill: transparent or ~5% opacity white),
+     positioned dead-center, sitting behind everything else (z-index: 0).
+  2) FRONT COPY: the full line (or the key phrase) in a bold condensed
+     grotesque, 100% opaque solid fill (white or a light gradient — see
+     Color & Type System), sitting above the ghost copy (z-index: 2).
+- If one word deserves special emphasis, set ONLY that word in a contrasting
+  script/serif face against the rest of the line in the bold grotesque —
+  never both faces at equal weight.
+- Entrance: ghost copy fades/scales in first (0.0–0.3s), front copy snaps in
+  0.15s after with a fast-in-slow-settle ease, landing dead-center.
+- Background stays alive underneath both layers the whole time (see Camera & Motion System).`
+  },
+  numbered_badges: {
+    label: "Numbered Icon Badges",
+    preview: "2–4 circular badges in a horizontal row, each with a line-icon and a number, staggered pop-in. Best for '3 ways to X', numbered lists.",
+    recipe: `PRIMARY DEVICE: Numbered Icon Badges
+- Build 2–4 circular badges (choose the count to match what's actually being
+  listed in THE LINE — if nothing is enumerated, default to 3).
+- Each badge: a circle ~140px diameter (scale proportionally to RESOLUTION),
+  a simple 2px-stroke line-icon centered inside it, and a number set either
+  overlapping the badge's top-right edge or sitting just beside it.
+- Lay badges out in a single horizontal row, evenly spaced but NOT perfectly
+  symmetrical — offset the whole row slightly off dead-center (e.g. shifted
+  6-10% left or right of frame center) so it doesn't read as a template grid.
+- Entrance: badges pop in staggered 0.15–0.3s apart, left to right, each with
+  a quick overshoot-and-settle scale bounce (scale 0 → 1.08 → 1.0), not a
+  plain fade.
+- A short caption/label may sit beneath the row, fading in after the last
+  badge lands.`
+  },
+  orbital_roadmap: {
+    label: "Orbital Ring / Roadmap Diagram",
+    preview: "A thin circle with evenly spaced nodes around its circumference and a label centered inside, slowly rotating or pulsing. Best for 'roadmap', 'process', 'the plan'.",
+    recipe: `PRIMARY DEVICE: Orbital Ring / Roadmap Diagram
+- Draw a single thin circular ring (SVG circle, stroke only, 1.5-2px, ACCENT_COLOR
+  at ~60% opacity), diameter roughly 55-65% of the frame's shorter dimension.
+- Place evenly spaced nodes (small diamonds or dots, one per stage/step
+  implied by THE LINE — if a number is stated, e.g. "6 week", use that many
+  nodes) around the ring's circumference.
+- A short label (the key phrase from THE LINE, e.g. a duration or the word
+  "ROADMAP") sits centered inside the ring.
+- The ring itself rotates slowly and continuously (a full rotation over
+  10-20s, so within a short clip it reads as a subtle constant drift, never
+  a static circle) OR the nodes pulse in sequence one at a time (a brief
+  scale+glow pulse traveling around the ring every 0.4-0.6s per node) —
+  pick ONE of these two, not both.
+- Entrance: the ring draws itself on with stroke-dasharray/stroke-dashoffset
+  animating from 0 to full over 0.4-0.6s, nodes pop in staggered right after,
+  the center label fades/scales in last.`
+  },
+  orbiting_spheres: {
+    label: "Orbiting Spheres Around a Core",
+    preview: "Small spheres circle a bright central orb. Built from flat 2D layers at different scales/speeds to fake depth. Best for growth, ecosystems, 'everything connects'.",
+    recipe: `PRIMARY DEVICE: Orbiting Spheres Around a Core
+- One bright central sphere/orb, dead-center, built as: a solid circular div
+  with a radial-gradient fill (light source top-left) plus a larger, softer
+  radial-gradient glow div positioned directly behind it.
+- 3-5 smaller spheres orbit it. Fake the 3D depth with flat 2D layers only:
+  spheres positioned along elliptical paths (use JS with requestAnimationFrame
+  driving transform: translate() + scale(), not real perspective/rotateX/
+  translateZ), where "far" spheres are smaller, more desaturated, and move
+  slightly slower than "near" spheres.
+- Each orbit path can be a different size/speed/tilt so they don't all read
+  as one flat ring.
+- A keyword from THE LINE floats among the spheres or sits just beside the
+  core, in the same lit/gradient text treatment as the rest of the type.
+- Entrance: core sphere scales in first with a soft overshoot, orbiting
+  spheres fly in staggered from just off-frame and settle into their orbits.`
+  },
+  glass_progress: {
+    label: "Glass UI Card / Progress State",
+    preview: "A rounded card with a file/folder icon, a label, and a progress bar or percentage animating upward. Best for 'turning X into Y', upload/processing metaphors.",
+    recipe: `PRIMARY DEVICE: Glass UI Card / Progress State
+- One rounded-rect card, roughly 30-38% of frame width, NOT perfectly
+  centered — offset slightly to one side so the rest of the frame carries
+  secondary motion.
+- Card fill: a subtle two-stop linear-gradient (not flat), a 1px semi-
+  transparent border, and a soft glow div positioned behind it for lift.
+- Inside: a small file/folder/document icon top-left, a short label (drawn
+  from THE LINE) below it, and a progress bar or percentage counter along
+  the bottom third.
+- The progress bar/counter animates from 0 to a final value using JS
+  (requestAnimationFrame + performance.now(), eased with slow-anticipation-
+  into-fast-release so it feels like it's "landing" on the final number).
+- Entrance: card slides/scales in with a fast-in-slow-settle ease, icon and
+  label stagger in after (0.1-0.2s apart), progress bar animation starts
+  last and should finish landing right as the HOLD beat begins.`
+  },
+  floating_3d: {
+    label: "Floating 3D Objects",
+    preview: "2-4 render-style objects drifting in with slow independent rotation and parallax. Best for money, time, discovery, searching.",
+    recipe: `PRIMARY DEVICE: Floating 3D Objects
+- Pick 2-4 objects that literally match THE LINE's subject (e.g. coins for
+  money, a stopwatch for time, a magnifying glass for searching, a compass
+  for direction/plan). Build each as a flat 2D graphic (SVG or gradient-
+  filled shapes) with a strong single light source and a soft cast-glow
+  div behind it to sell dimensionality — real 3D transforms are allowed if
+  you want them (perspective/rotateX/rotateY/translateZ), but flat 2D fakes
+  work fine too.
+- Objects drift in from different edges of frame (not all from the same
+  side), each with its own slow independent rotation speed and slightly
+  different drift speed, so they read as independently floating rather than
+  one synced group.
+- A keyword from THE LINE floats among them in the lit/gradient text
+  treatment.
+- Entrance: objects drift in over 0.4-0.8s each, staggered, with a brief
+  motion trail if moving fast; once settled they keep a slow idle rotation/
+  bob for the rest of the clip — nothing goes fully still.`
+  },
+  connector_diagram: {
+    label: "Connector / Relationship Diagram",
+    preview: "Two or three labeled nodes linked by a line that draws itself in, showing flow between things. Best for comparisons, 'X leads to Y'.",
+    recipe: `PRIMARY DEVICE: Connector / Relationship Diagram
+- Identify the 2-3 things being related in THE LINE (if the line doesn't
+  name explicit items, split it into a clear before/after or cause/effect
+  pair). Build one labeled node per item: a small rounded card or icon +
+  label, NOT perfectly evenly spaced — vary size/position slightly.
+- Connect them with a curved or dashed line/path (SVG) that draws itself on
+  using stroke-dasharray/stroke-dashoffset animating from fully hidden to
+  fully drawn over 0.4-0.7s, timed to travel FROM the first node TO the
+  second as if showing cause leading to effect.
+- Entrance: first node pops in, then the connector line draws itself toward
+  the second node, then the second node lands right as the line arrives
+  (not before) — the sequence itself tells the story.
+- Optional: an arrowhead or small pulse travels along the line once it's
+  fully drawn, then the whole diagram holds.`
+  },
+  app_icon_grid: {
+    label: "App/Tool Icon Grid Reveal",
+    preview: "A small grid or row of square app-style icons pop in staggered under a glowing headline. Best for 'the tools you'll use', 'everything included'.",
+    recipe: `PRIMARY DEVICE: App/Tool Icon Grid Reveal
+- Build 3-6 square icon tiles (rounded corners ~18-22% of tile width, a
+  subtle two-stop gradient fill per tile, a thin 1px lighter-toned edge, and
+  a soft glow div behind each for lift — never a flat single-color square).
+- Arrange in a row or loose grid, offset slightly asymmetric rather than a
+  perfectly even grid.
+- A headline drawn from THE LINE sits above the grid in the lit/gradient
+  text treatment, with its own soft glow behind it.
+- Entrance: headline settles first, then tiles pop in staggered 0.12-0.2s
+  apart left-to-right (or in reading order), each with a quick scale-bounce
+  landing.`
+  },
+  stacked_card_flip: {
+    label: "Stacked Card Flip",
+    preview: "A small stack of fanned cards, the front one flipping in to reveal a number/price/label, the rest dimmed behind it. Best for pricing reveals, countdowns.",
+    recipe: `PRIMARY DEVICE: Stacked Card Flip
+- Build 3-4 cards fanned behind each other: each offset slightly in position,
+  rotation (a few degrees of 2D rotate, not true 3D), and scale, with cards
+  further back desaturated/dimmed (lower opacity or a darker overlay tint —
+  not blurred) to sell depth.
+- The front card is the hero: it flips or rotates in (2D rotate + scale,
+  or if 3D transforms are being used, a real rotateY flip) to reveal a
+  number, price, or label drawn from THE LINE, set in the hero gradient
+  type treatment.
+- Entrance: the stack is already fanned out at frame start (established,
+  not animated in), then the front card does its flip/reveal at the clip's
+  main beat with a slow-anticipation-into-fast-release ease so the reveal
+  itself lands with weight.
+- Hold on the revealed front card, background cards still very slightly
+  alive (a faint idle sway), nothing fully static.`
+  },
+  credit_card_reveal: {
+    label: "Floating Credit-Card / Balance Reveal",
+    preview: "A glassy card panel tilts in with a balance/number ticking upward, sharp shard shapes floating behind for depth. Best for earnings, balance, price reveals.",
+    recipe: `PRIMARY DEVICE: Floating Credit-Card / Balance Reveal
+- One glassy rounded-rect card (card-shaped aspect ratio), subtle chip icon
+  in a corner, embossed-looking label text, tilts in with perspective (real
+  3D transform: perspective + rotateX/Y is fine here, or fake it with a 2D
+  skew if you prefer) from an angle to a near-flat resting tilt.
+- A number or balance ticks upward via JS (requestAnimationFrame +
+  performance.now()) from 0 (or a lower value) to its final value, landing
+  with a slow-anticipation-into-fast-release ease right as the card settles.
+- 2-4 sharp, angular shard/geometric shapes float behind the card at
+  different depths (different scale + slightly different drift speed) for
+  parallax — flat 2D layers, not true z-depth stacks, unless real 3D is
+  being used throughout.
+- Entrance: shards drift in first (establishing the background is alive),
+  then the card tilts in and locks to its resting angle, then the number
+  ticks up.`
+  },
+  dashed_callout: {
+    label: "Dashed-Border UI Callout",
+    preview: "A dashed rectangle 'highlights' a floating phone/app mockup or label with a sticker-style accent. Best for naming a concept or feature.",
+    recipe: `PRIMARY DEVICE: Dashed-Border UI Callout
+- One dashed rounded-rectangle outline (border: 2px dashed ACCENT_COLOR,
+  border-radius) "highlighting" either a simple floating phone/app mockup
+  shape or a short label pulled from THE LINE.
+- A small sticker/tape-style accent sits in one corner of the dashed box
+  (a small rotated rectangle with a torn or folded-corner look, in a
+  contrasting color), purely textural.
+- A bold headline sits beside or below the dashed box in the hero gradient
+  type treatment.
+- Entrance: the dashed box draws itself on (stroke-dasharray animating in,
+  or a simple scale-in with the dash pattern already visible), the sticker
+  accent pops in with a quick rotate-and-settle, the headline slides/fades
+  in last.`
+  },
+  chart_reveal: {
+    label: "Animated Data Chart Reveal",
+    preview: "A glass panel with a header stat, a filter row, and a line chart drawing itself left to right with glowing points landing in sequence. Best for growth, results.",
+    recipe: `PRIMARY DEVICE: Animated Data Chart Reveal
+- One glass panel card containing: a header stat (large number, small label
+  above it, in the hero gradient type treatment), an optional thin filter/
+  tab row beneath it, and a line chart occupying the lower half.
+- The chart line draws itself on left to right using stroke-dasharray/
+  stroke-dashoffset animating from 0 to full length over 0.6-1.0s, timed to
+  an ease-in-out (it should feel like it's being plotted, not just appearing).
+- Data points along the line light up (a brief glow/scale pulse) in
+  sequence as the line reaches each one, not all at once.
+- The header stat number counts upward via JS in sync with the line's
+  progress, landing on its final value right as the line finishes drawing.
+- Background stays alive (a faint drifting gradient or particles) behind
+  the glass panel the whole time.`
+  },
+  emblem_badge: {
+    label: "Central Emblem / Logo Badge",
+    preview: "A glowing badge with a dimensional icon/mark inside it, concentric rings pulsing outward. Best for 'introducing', a definitive closing beat.",
+    recipe: `PRIMARY DEVICE: Central Emblem / Logo Badge
+- One glowing spherical or rounded-square badge, dead-center, built from a
+  radial-gradient fill plus a larger soft glow div behind it, with a simple
+  dimensional icon or mark inside (drawn from THE LINE's core concept).
+- 2-3 concentric thin rings pulse outward from the badge on a loop
+  (scale from 1.0 to ~1.8 while fading opacity to 0, staggered so a new
+  ring starts every 0.6-1.0s) — this is the "something always alive"
+  requirement for this device.
+- A thin circuit-line or orbit-line texture sits faintly in the backdrop
+  (low opacity, purely textural, never competing with the badge).
+- Entrance: badge scales in from 0 with a strong overshoot-and-settle
+  (scale 0 → 1.15 → 1.0), the pulsing rings start the instant it lands,
+  any label/wordmark beneath it fades in last.`
+  }
+};
+
+const deviceSelect = document.getElementById('fDevice');
+Object.entries(DEVICES).forEach(([key, d])=>{
+  const opt = document.createElement('option');
+  opt.value = key; opt.textContent = d.label;
+  deviceSelect.appendChild(opt);
+});
+deviceSelect.value = 'numbered_badges';
+
+function updateDevicePreview(){
+  const d = DEVICES[deviceSelect.value];
+  document.getElementById('devicePreview').textContent = d.preview;
+  document.getElementById('metaDevice').textContent = d.label;
+}
+deviceSelect.addEventListener('change', updateDevicePreview);
+updateDevicePreview();
+
+/* ============ resolution handling ============ */
+const resPreset = document.getElementById('fResPreset');
+const customRow = document.getElementById('customResRow');
+const fW = document.getElementById('fW'), fH = document.getElementById('fH');
+function applyResPreset(){
+  const v = resPreset.value;
+  if(v === 'custom'){ customRow.style.display='grid'; return; }
+  customRow.style.display='none';
+  const [w,h] = v.split('x').map(Number);
+  fW.value = w; fH.value = h;
+}
+resPreset.addEventListener('change', ()=>{ applyResPreset(); updateMeta(); });
+applyResPreset();
+
+/* ============ signal preview + meta chips ============ */
+const fLine = document.getElementById('fLine');
+function updateSignal(){
+  document.getElementById('signalText').textContent = fLine.value.trim() || 'your line goes here';
+}
+fLine.addEventListener('input', updateSignal);
+updateSignal();
+
+function updateMeta(){
+  document.getElementById('metaRes').textContent = fW.value+'×'+fH.value;
+  document.getElementById('metaFps').textContent = document.getElementById('fFps').value+'fps';
+  const dur = parseFloat(document.getElementById('fDuration').value)||0;
+  document.getElementById('metaDur').textContent = dur.toFixed(1)+'s';
+  document.getElementById('fFramesOut').value = Math.round(dur * parseFloat(document.getElementById('fFps').value));
+}
+[fW,fH,document.getElementById('fFps'),document.getElementById('fDuration')].forEach(el=>{
+  el.addEventListener('input', updateMeta);
+});
+updateMeta();
+
+/* ============ beat calculator ============ */
+function computeBeats(duration){
+  const pct = [0, .08, .20, .45, .55, .85, 1.0];
+  const t = pct.map(p => Math.round(p*duration*100)/100);
+  return {
+    establish: [t[0], t[1]],
+    firstPunch: [t[1], t[2]],
+    stagger: [t[2], t[3]],
+    caption: [t[3], t[4]],
+    hold: [t[4], t[5]],
+    exit: [t[5], t[6]]
+  };
+}
+
+/* ============ AUTO device menu text (used only when 'auto' selected) ============ */
+function autoMenuText(){
+  return Object.values(DEVICES).filter(d=>d.recipe).map(d=>{
+    return `- ${d.label}: ${d.preview}`;
+  }).join('\n');
+}
+
+/* ============ compose the final prompt ============ */
+function composePrompt(){
+  const line = fLine.value.trim() || 'here\'s your 6 week roadmap';
+  const vibe = document.getElementById('fVibe').value.trim();
+  const w = fW.value, h = fH.value;
+  const fps = document.getElementById('fFps').value;
+  const duration = parseFloat(document.getElementById('fDuration').value) || 6;
+  const totalFrames = Math.round(duration * fps);
+  const colorHex = document.getElementById('fColorHex').value;
+  const deviceKey = deviceSelect.value;
+  const device = DEVICES[deviceKey];
+  const beats = computeBeats(duration);
+
+  const deviceSection = deviceKey === 'auto'
+    ? `PRIMARY DEVICE: not chosen yet — YOU must pick exactly one.
+Pick whichever of these best matches THE LINE below, build the ENTIRE clip
+around it, and do not combine more than one. State which one you picked as
+a one-line comment at the very top of the HTML file.
+
+${autoMenuText()}`
+    : device.recipe;
+
+  const vibeLine = vibe
+    ? `The requested mood/vibe for this clip is: "${vibe}". Let this drive your color and pacing choices.`
+    : `No specific mood was requested — choose whatever background, color grade, and pacing feel most natural for this exact line.`;
+
+  return `You are building a single self-contained HTML/CSS/JS motion graphic,
+rendered frame-by-frame to video at ${w}x${h} @ ${fps}fps, total duration
+${duration.toFixed(1)} seconds (${totalFrames} total frames).
+
+============================================================
+OUTPUT FORMAT — READ THIS FIRST, IT IS NOT OPTIONAL
+============================================================
+Your entire reply is ONE file: a single, complete, valid HTML document,
+from the literal characters "<!DOCTYPE html>" to the literal characters
+"</html>", wrapped in exactly one \`\`\`html ... \`\`\` code fence and
+nothing else.
+
+- Do NOT split your answer into separate CSS / HTML / JS blocks. The CSS
+  goes inside one <style> tag in <head>. The JS goes inside one <script>
+  tag near the end of <body>. The markup goes inside <body>. All three
+  live inside the ONE file, in their normal places — never as three
+  separate pieces stitched together, never as three separate code fences,
+  never as a CSS dump followed by a bare fragment of markup followed by a
+  bare <script> block.
+- Do NOT write any prose, explanation, headers, or commentary before,
+  between, or after the code. No "Here's the file:", no "I used X
+  technique here", nothing. If you catch yourself about to write a
+  sentence of English outside a code comment, stop and delete it.
+- Do NOT return the file as multiple separate fenced blocks even if you
+  label them ("css", "html", "javascript") — that is not usable output,
+  it is fragments of a file, and it will be rejected. There is exactly
+  ONE fence, containing ONE runnable file, containing everything.
+- Before you send your reply, count your own code fences. If the answer
+  is not exactly 1, you have failed this task — merge everything back
+  into a single file before responding.
+
+============================================================
+NON-NEGOTIABLE NUMBERS — copy these exact values verbatim, do not round,
+substitute, or "improve" them, and re-check your finished file against
+this exact list before you return it:
+============================================================
+  WIDTH_PX      = ${w}
+  HEIGHT_PX     = ${h}
+  FPS           = ${fps}
+  DURATION_SEC  = ${duration.toFixed(2)}
+  TOTAL_FRAMES  = ${totalFrames}
+  ACCENT_COLOR  = ${colorHex}
+These five values are the ONLY source of truth for size/timing in this
+document. If any other line in this prompt seems to imply a different
+number, THESE are correct — every other timestamp below is derived from
+DURATION_SEC and must scale with it, not override it.
+
+============================================================
+WHAT THIS IS
+============================================================
+This is a CUTAWAY — a few seconds of graphic that pops on screen while a
+talking-head video keeps playing underneath, then cuts back to camera. It
+exists to keep attention while visually punctuating exactly what's being
+said. It does not explain anything or teach anything. It just needs to look
+expensive and intentional, like a human editor cut it — not generic, not a
+slideshow template.
+
+THE LINE BEING ILLUSTRATED (this is the only thing this clip is about):
+"${line}"
+
+${vibeLine}
+
+RULE #1 — ONE DEVICE ONLY: build the whole clip around a single primary
+visual device. Do not stack multiple devices from the list. Everything else
+in this prompt (color, camera, composition) supports that one device.
+
+============================================================
+${deviceSection}
+============================================================
+
+============================================================
+COLOR & TYPE SYSTEM
+============================================================
+- Accent color for this clip: ${colorHex}. This ONE color drives every glow,
+  edge, stroke, chart line, and icon accent in the clip. Do not introduce a
+  second unrelated accent color.
+- Background must NOT be flat black and must NOT be static. Use a dark
+  gradient field (near-black or a deep tint of the accent color) that
+  slowly drifts, breathes, or shifts over the full duration — even a subtle
+  shift is required, a frozen background is not allowed.
+- Headline / hero text typeface: a bold, slightly condensed grotesque
+  (e.g. Unbounded, Poppins ExtraBold, or similar — use a Google Fonts
+  @import or <link> and WAIT for document.fonts.ready before starting the
+  animation clock, so the correct font is guaranteed loaded before frame 0).
+- If one word needs special emphasis, set only that word in a contrasting
+  script or serif face — never let two display faces compete at the same
+  weight in the same shot.
+- No flat-filled hero text. Every headline/number/key label gets ONE of:
+  a linear-gradient text fill (e.g. white fading into ${colorHex}), a subtle
+  text-shadow for lit depth, or a fine light-catching 1px edge. Example
+  pattern for gradient text:
+    .hero-text {
+      background: linear-gradient(180deg, #ffffff 0%, ${colorHex} 130%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent; color: transparent;
+    }
+- Supporting/caption text can stay simple off-white — only the hero text of
+  the clip needs the special treatment.
+- Optional, sparse only: a tiny HUD-style detail in one corner (a faint
+  timecode, tick marks, a small label) at 15-25% opacity, purely textural,
+  never competing with the main device.
+
+============================================================
+CAMERA & MOTION SYSTEM (this is what makes it look "shot", not "CSS")
+============================================================
+Use TWO nested wrappers, not one, for the camera — this is not optional.
+CSS \`perspective\` only affects the 3D rendering of an element's CHILDREN,
+never the element it's declared on. If you put \`perspective\` and the
+animated scale/translateZ/rotateX transform on the SAME div, the
+perspective does nothing and any translateZ/rotateX in that animation is
+visually inert (it will just look like a flat scale, with no real depth
+or foreshortening) — this is a common and easy-to-miss mistake.
+Structure it as:
+  <div class="stage" style="perspective: 1200px;">      <!-- static, never itself transformed -->
+    <div class="camera-rig" style="transform-style: preserve-3d; transform-origin: center;">  <!-- THIS is what gets the scale/translateZ/rotateX animation -->
+      <!-- scene content -->
+    </div>
+  </div>
+The outer \`.stage\` holds perspective and is never animated. The inner
+\`.camera-rig\` is the one whose transform actually changes over time. This
+is what makes a hard punch-in or pull-out actually read as real depth
+instead of a flat scale change. The camera is NEVER idle for the full clip:
+- Continuous slow push-in (scale creeping up, e.g. 1.0 → 1.06) during any
+  hold beat, PLUS at least one hard, deliberate punch-in or pull-out
+  between beats — a real zoom, not a gentle drift.
+- The active subject locks to dead-center within 0.2-0.4s of appearing and
+  the camera holds it centered through the punch-in.
+- Every animation gets its own explicit easing, matched to what it's doing.
+  Use these exact curves as your default palette (all are literal
+  cubic-bezier values you can paste directly):
+    Reveals / pop-ins / zoom tail:        cubic-bezier(.16,1,.3,1)
+    Number landing / punch-in impact:     cubic-bezier(.65,0,.35,1)
+    Holds / slow continuous push:         cubic-bezier(.45,0,.55,1)
+- Motion trails (for fast whip-pans / punch-ins only): this is REQUIRED
+  for the hard punch-in beat and the hard pull-out/exit beat specifically
+  — every clip has both, so every clip needs the trail effect fired at
+  both of those moments, not just when it happens to fit. Fake it with
+  2-4 duplicate copies of the moving element, offset slightly along its
+  motion path, each at progressively lower opacity, alive ONLY while the
+  move is fast and cleared the instant it settles. cloneNode(true) copies the
+  \`id\` attribute (and every descendant's \`id\`) verbatim, which creates
+  duplicate ids in the live DOM for as long as the ghost exists — always
+  strip id from the clone and every descendant before appending it.
+  Example skeleton:
+    function spawnTrail(el, steps=3){
+      for(let i=1;i<=steps;i++){
+        const ghost = el.cloneNode(true);
+        ghost.removeAttribute('id');
+        ghost.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+        ghost.style.opacity = (0.35 / i).toFixed(2);
+        ghost.style.transform = el.style.transform + ' translateX(' + (i*6) + 'px)';
+        ghost.style.pointerEvents = 'none';
+        el.parentNode.appendChild(ghost);
+        setTimeout(()=>ghost.remove(), 180);
+      }
+    }
+- After the device finishes assembling, hold it fully legible for at least
+  0.5-0.8s with NO competing foreground motion — but the camera keeps
+  slow-pushing even during this hold. Total stillness is never allowed.
+- Multi-part reveals (icons, cards, nodes) stagger in 0.1-0.3s apart, never
+  simultaneously.
+- Something in the background is always alive during any hold: a breathing
+  gradient, drifting particles, or a rotating ring — the ONLY thing that
+  should sit still is the exact element currently being read.
+
+============================================================
+COMPOSITION RULES
+============================================================
+- The chosen device is the hero. Fill remaining frame space with very
+  low-opacity secondary motion (faint particles, a soft duplicate shape, a
+  thin rotating ring) rather than new competing content.
+- Depth over flatness: even a simple card or icon should sit on more than
+  one visual plane (a soft glow layer behind it, a subtle parallax layer
+  behind that), so nothing reads as a flat sticker on the background.
+- Keep it asymmetric where it makes sense — perfectly even, perfectly
+  centered, perfectly symmetrical layouts read as a template. Offset things
+  slightly, vary sizes, let an element bleed slightly off-frame if it suits
+  the device.
+
+============================================================
+STORY BEATS — exact timestamps for THIS ${duration.toFixed(1)}s clip
+============================================================
+${beats.establish[0].toFixed(2)}s – ${beats.establish[1].toFixed(2)}s   Establish: background gradient already breathing, any ambient particles already drifting, camera starts pulled slightly wide.
+${beats.firstPunch[0].toFixed(2)}s – ${beats.firstPunch[1].toFixed(2)}s   Hard punch-in as camera locks center; the device's first element snaps in (brief motion trail if the move is fast), settles fully sharp the instant it lands.
+${beats.stagger[0].toFixed(2)}s – ${beats.stagger[1].toFixed(2)}s   Remaining elements of the device stagger in 0.1-0.3s apart; camera continues a slow creeping push through this whole beat.
+${beats.caption[0].toFixed(2)}s – ${beats.caption[1].toFixed(2)}s   Caption/label (if the device uses one) fades or slides in beneath/beside the main device; camera punches in slightly tighter on the group.
+${beats.hold[0].toFixed(2)}s – ${beats.hold[1].toFixed(2)}s   HOLD — everything settled and fully legible. Background/particles still alive. Camera still on a slow continuous push the entire hold. Never fully static.
+${beats.exit[0].toFixed(2)}s – ${beats.exit[1].toFixed(2)}s   Hard pull-out or push-through exit with a quick trail effect, timed as a real camera move back toward open framing, ready to cut back to the talking head.
+
+============================================================
+TIMING — SINGLE SOURCE OF TRUTH (read this before writing __mfSoundCues)
+============================================================
+This is the single most common way these builds go subtly wrong: the
+visual timing and the audio timing get written as two separate sets of
+numbers that LOOK like they agree but don't, so sounds drift earlier or
+later than the thing they're supposed to accompany — a little at first,
+worse with each subsequent staggered element.
+
+- Define every stagger/delay/duration used anywhere in the clip as a
+  named constant or a single computed expression (e.g. a JS array
+  \`const NODE_DELAYS = [0.64, 0.94, 1.24, ...]\` or a per-element CSS
+  custom property like \`--delay\`), and reuse THAT SAME value everywhere
+  it's needed — in the CSS animation-delay / JS comparison that actually
+  triggers the visual, AND in the atMs you write for that event's sound
+  cue. Never hand-type the timestamp a second time from memory or from
+  "roughly the same number" — compute atMs directly from the identical
+  constant (e.g. \`atMs: Math.round(NODE_DELAYS[i] * 1000)\`), or if you
+  paste a literal number, paste it from the exact same place you got the
+  visual's number, not a plausible-looking round figure.
+- This applies just as much if you drive the scene with a single JS
+  tick()/requestAnimationFrame loop instead of CSS keyframes: if node 3's
+  reveal is gated on \`tSec >= 2.10\`, its sound cue MUST be
+  \`atMs: 2100\` — not 2200, not a number copied from an earlier draft,
+  not a number that merely fits the 0.1-0.3s stagger guidance in STORY
+  BEATS above. That guidance is a range for you to design within ONCE;
+  after you've picked concrete numbers for the visuals, the audio must
+  match those exact concrete numbers, not the general range.
+- Prefer CSS @keyframes + animation-delay for anything on a fixed
+  timeline (per CAMERA & MOTION SYSTEM above) specifically because it
+  makes this easier to get right: the delay value is one literal number
+  you can copy straight into atMs. If you instead hand-roll a JS
+  tick()/rAF loop with manual interpolation (re-implementing cubic-bezier
+  easing yourself, driving camera/element transforms from inline styles
+  every frame), you are taking on strictly more risk of exactly this
+  drift bug for no visual benefit — CSS animations render identically
+  and are far harder to accidentally desync from their own delay value.
+  Don't reach for a hand-written JS animation clock unless the effect
+  genuinely requires a running numeric value (a counter, particle
+  positions, a procedurally drawn chart) that CSS cannot express.
+- Before finalizing window.__mfSoundCues, go back through your own file
+  event by event (every stagger step, every punch-in, every caption, the
+  exit) and confirm each atMs is the literal millisecond value of that
+  event's own trigger condition in your code — not an estimate, not a
+  value from this prompt's example STORY BEATS list, and not left over
+  from an earlier version of the timing you since changed.
+- A specific anti-pattern to never write: defining the same timestamps
+  twice in two different notations — e.g. CSS custom properties like
+  \`--t-punchin: 0.64s\` in :root AND a separate JS \`const T_PUNCHIN = 640\`
+  used for setTimeout/atMs. Even when the two numbers start out equal,
+  they are two independent places to edit, and any later tweak to one
+  (adjusting a CSS animation-delay while iterating) silently leaves the
+  other stale — which desyncs both the sound cue AND the JS-driven
+  visuals (like a camera exit keyframe) from whatever the CSS timeline
+  is actually doing. Pick exactly one authoritative representation of
+  time for the whole file (JS constants are usually easiest, since atMs
+  can reference them directly) and derive the other from it — e.g. write
+  CSS animation-delay values as literal seconds computed from the same
+  JS constants at file-authoring time, or set them via inline style /
+  style.setProperty from JS at runtime — never hand-maintain both.
+- Also double check duration alignment specifically: if a CSS
+  @keyframes animation drives a visual all the way through its exit
+  (e.g. a camera pull-out at 100%), the animation's own \`Xs\` duration
+  must equal the atMs of any sound cue tied to that exit, converted to
+  seconds — not merely close to it. A whoosh cue firing before the
+  keyframe it's supposed to accompany has actually finished is exactly
+  the kind of drift this section exists to prevent.
+
+============================================================
+SOUND DESIGN SYSTEM (this clip is NOT silent — every motion has audio)
+============================================================
+This clip ships with a full sound design, not just visuals. Nothing in the
+timeline above is allowed to animate silently.
+
+- SOURCE EVERY SOUND FROM THE APPROVED BANK BELOW — do not search the web
+  for sound effects and do not use any other host. This is not a stylistic
+  preference: sites like Mixkit (assets.mixkit.co), Wikimedia/Wikipedia
+  (upload.wikimedia.org), Freesound, and most other "free SFX" sites run
+  bot-detection on their file servers. A real, valid, correctly-typed URL
+  on those sites will still come back HTTP 403 when the RENDER ENGINE
+  fetches it server-side to build the audio track, because that fetch has
+  no browser fingerprint — this happens 100% of the time on those hosts,
+  regardless of how carefully the URL was chosen, so "search harder for a
+  real URL" can never fix it. The bank below is hosted on
+  actions.google.com/sounds/v1/, Google's public sound-effect library
+  (CC BY 4.0, no login, built specifically to be hotlinked by other apps)
+  — every URL in it has been verified to return the actual audio file with
+  no bot-block. Only pull from this bank:
+
+- SOUND AESTHETIC — READ BEFORE PICKING: these clips are meant to sound
+  premium, modern, and tech-forward — think a confident product launch or
+  a high-end SaaS demo reel, NOT a movie trailer and NOT a cartoon or
+  kids' show. "Cinematic" here means clean and well-produced, not tense,
+  dark, or dread-inducing. This distinction matters because a sound can
+  be well-produced, deep, and reverberant while still reading as ominous
+  — depth alone does not equal premium. Every entry below is tagged
+  (SLEEK), (TENSE — AVOID), or (CARTOONY):
+    - Default to (SLEEK) entries every time. They read as tech/premium —
+      clean, bright-to-mid, mechanical or digital, resolving rather than
+      lingering — and match the confident, positive tone this system
+      always produces.
+    - (TENSE — AVOID) entries are technically well-produced and might
+      even sound "cinematic" in isolation, but they are built for
+      suspense, dread, or horror scoring (booming low-end, pitch-drops,
+      unresolved swells, anything literally named with words like
+      foreboding, suspense, dread, ominous, slam, crash, breaking,
+      rubble). These read as a horror-trailer or jump-scare cue once
+      placed under a bright UI-driven motion graphic, even though the
+      raw audio file sounds "premium" on its own. Do NOT use these
+      unless the user's requested vibe explicitly asks for something
+      dark, thriller, or horror-themed — treat them as fully off-limits
+      by default, with the same priority as the CARTOONY rule below.
+    - Only reach for a (CARTOONY) entry — cartoon whistles, boings,
+      xylophone runs — if the user's requested vibe explicitly asks for
+      something playful, comedic, bouncy, or kid-friendly. Absent that,
+      treat (CARTOONY) entries as off-limits.
+    - Do NOT use any entry marked (AMBIENT — DO NOT USE AS A CUE): these
+      are long, looping drone/atmosphere beds meant to run underneath an
+      entire scene, not discrete event-timed hits. Firing one at a single
+      atMs timestamp for a fraction of a second either does nothing
+      audible or leaves a stray hum ringing on top of the next cue. They
+      are listed only so you recognize and skip them.
+  If a category has no (SLEEK) option left that fits, reuse a (SLEEK)
+  entry from a neighboring category rather than dropping to (TENSE) or
+  (CARTOONY). When in doubt between two options, pick the one that
+  resolves quickly and reads as "confident click/chime" over the one
+  that reads as "building dread" — a premium product reveal sounds
+  satisfied, not suspenseful.
+
+  PUNCH / HIT / IMPACT (first hard punch-in, camera whip landing):
+    https://actions.google.com/sounds/v1/impacts/metal_thud.ogg                  (SLEEK — mechanical, resolves fast — top pick)
+    https://actions.google.com/sounds/v1/cartoon/cymbal_kick.ogg                 (SLEEK — sharp stinger, reads cinematic)
+    https://actions.google.com/sounds/v1/impacts/crash_impact_sweetener.ogg      (SLEEK — cinematic hit, use for the biggest single moment only)
+    https://actions.google.com/sounds/v1/impacts/reverberating_slam.ogg          (TENSE — AVOID: long dark reverb tail reads as a horror-trailer hit, not a premium punch-in)
+    https://actions.google.com/sounds/v1/science_fiction/rubble_breaking.ogg     (TENSE — AVOID: destruction/impact texture, reads violent not premium)
+    https://actions.google.com/sounds/v1/cartoon/concussive_guitar_hit.ogg       (CARTOONY — avoid unless playful vibe)
+
+  SOFT TICK / POP (staggered elements landing, badges popping in):
+    https://actions.google.com/sounds/v1/office/button_push.ogg                 (SLEEK — clean UI click — top pick)
+    https://actions.google.com/sounds/v1/office/click_continuous.ogg            (SLEEK — crisp digital click)
+    https://actions.google.com/sounds/v1/office/push_computer_keys.ogg          (SLEEK — precise tech tick)
+    https://actions.google.com/sounds/v1/cartoon/metal_twang.ogg                (SLEEK — crisp metallic click)
+    https://actions.google.com/sounds/v1/cartoon/woodblock_hit.ogg              (CARTOONY — avoid unless playful vibe)
+    https://actions.google.com/sounds/v1/cartoon/pop.ogg                        (CARTOONY — avoid unless playful vibe)
+
+  RISER / WHOOSH SUBSTITUTE (fast camera moves, whip-pans, exits):
+    https://actions.google.com/sounds/v1/science_fiction/sci_fi_vortex.ogg      (SLEEK — swirling tech whoosh, resolves clean — top pick)
+    https://actions.google.com/sounds/v1/science_fiction/alien_beam.ogg         (SLEEK — energy-beam whoosh, bright not dark)
+    https://actions.google.com/sounds/v1/cartoon/ufo_zip_whistle.ogg            (SLEEK-ish — usable zip/whoosh, lighter alternative)
+    https://actions.google.com/sounds/v1/science_fiction/high_to_low_sweep.ogg  (TENSE — AVOID: a pitch DROPPING sweep is the classic horror-sting/jump-scare shape — never use as a default whoosh)
+    https://actions.google.com/sounds/v1/cartoon/slide_whistle_up.ogg           (CARTOONY — avoid unless playful vibe)
+    https://actions.google.com/sounds/v1/cartoon/falling_whistle.ogg            (CARTOONY — avoid unless playful vibe)
+
+  CHIME / GLINT / EMBLEM (badge reveals, caption arriving, rings pulsing):
+    https://actions.google.com/sounds/v1/cartoon/mechanical_clock_ring.ogg      (SLEEK — precise, techy chime — top pick)
+    https://actions.google.com/sounds/v1/cartoon/tympani_bing.ogg               (SLEEK — clean cinematic accent, use sparingly)
+    https://actions.google.com/sounds/v1/science_fiction/electric_ring_long.ogg (TENSE — AVOID: long unresolved ring/drone tail sits under the next cue and reads eerie, not premium — only use if you trim/duck it hard)
+    https://actions.google.com/sounds/v1/cartoon/wind_chimes.ogg                (CARTOONY — avoid unless playful vibe)
+    https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg              (CARTOONY — avoid unless playful vibe)
+
+  RATTLE / TEXTURE (number counters ticking up, chart lines drawing):
+    https://actions.google.com/sounds/v1/science_fiction/robot_code.ogg         (SLEEK — digital rattle/texture, quick and clean — top pick)
+    https://actions.google.com/sounds/v1/cartoon/snare_roll_tumbling.ogg        (SLEEK-ish — usable, slightly more classic)
+    https://actions.google.com/sounds/v1/science_fiction/suspense_builder.ogg   (TENSE — AVOID: literally a thriller-score tension cue, do not use for a positive/premium reveal)
+    https://actions.google.com/sounds/v1/science_fiction/forboding_resonance.ogg (TENSE — AVOID: the name says it — "foreboding" is dread-coded by design, this is a horror-movie texture)
+    https://actions.google.com/sounds/v1/cartoon/xylophone_tip_toe_scale_up.ogg (CARTOONY — avoid unless playful vibe)
+
+  AMBIENT — DO NOT USE AS A CUE (these are long looping beds, not hits):
+    https://actions.google.com/sounds/v1/science_fiction/outer_space.ogg
+    https://actions.google.com/sounds/v1/science_fiction/ringing_ambient_background.ogg
+    https://actions.google.com/sounds/v1/science_fiction/windchime_drone.ogg
+
+  A quick gut-check for any sound not listed above: if you'd hear it under
+  a scene where something is about to jump out, or under a countdown to
+  something bad happening, it is TENSE, not SLEEK — regardless of how
+  "cinematic" or well-produced it sounds in isolation. Premium sound
+  design for a positive product/business reveal resolves upward or lands
+  cleanly; it does not build dread or trail off into a dark reverb tail.
+
+  Reuse the same URL for more than one cue if you need more hits than
+  categories above (e.g. two staggered badges can both use button_push.ogg)
+  — that is completely fine and expected, it does not need to be unique
+  per cue. Pick whichever (SLEEK) option best fits the device and vibe —
+  reach for the "top pick" in each category first — and you do not need
+  to use every category, and you do not need to search for anything
+  beyond this list.
+- Pick a distinct, appropriate sound for EVERY animation event on the beat
+  timeline above: the first hard punch-in (a whoosh/impact), every
+  staggered element landing (a soft tick/pop, layered if several land
+  close together), the caption reveal, any number counting up (a rising
+  tick or digital blip), chart lines drawing (a subtle sweep/synth rise),
+  ring pulses (soft reverberant pulses), and the exit whip-pan (a fast
+  whoosh/swish out). These discrete, event-timed hits are what should
+  cover the timeline — do NOT add a continuous ambient drone/hum/pad
+  bed running underneath the whole clip. A low sustained tone almost
+  always reads as background static/electrical noise once it's mixed
+  under everything else, which is worse than a brief quiet moment
+  between hits. If a gap between events genuinely feels too long and
+  silent, close it with one more short, soft, discrete sound (a faint
+  tick, a subtle riser) rather than a looping bed.
+- Match volume to role so the mix doesn't clip or turn to noise: soft
+  ticks/pops quietest (~0.3-0.5), standard accents mid (~0.5-0.7), camera
+  whooshes on hard punches loudest (~0.7-1.0). Stagger overlapping sounds
+  by a few ms if several elements land at once rather than firing them
+  all at identical timestamps.
+- Do NOT create an AudioContext, OscillatorNode, GainNode, BiquadFilterNode,
+  or any other Web Audio API node, and do NOT add an <audio> element, for
+  sound design purposes. Procedurally-synthesized or live-played audio
+  like this will sound fine if you open the file in a normal browser tab,
+  but the render engine only captures video frames — it never listens to
+  real-time audio playback of any kind — so a clip that relies on this
+  will export completely silent even though it "has sound" in preview.
+  The ONLY audio mechanism that survives export is window.__mfSoundCues
+  pointing at real hosted audio files (see contract below). If you catch
+  yourself writing "new AudioContext()" or "createOscillator()", stop —
+  that is the exact mistake that produces a silent MP4.
+
+TECHNICAL CONTRACT — how the render engine picks up your sounds:
+The render engine reads a global array called window.__mfSoundCues.
+Declare and fully populate it synchronously, at the top level of your
+script (NOT inside a requestAnimationFrame loop, NOT built up lazily, NOT
+waiting on any async event) so the whole list is complete before rendering
+starts. Every entry is:
+  { atMs: <number, ms from clip start when the sound should trigger>,
+    url:  '<direct https URL to the audio file, from the approved bank above>',
+    volume: <0-1, defaults to 1 if omitted> }
+Example:
+  window.__mfSoundCues = [
+    { atMs: 0,    url: 'https://actions.google.com/sounds/v1/cartoon/pop.ogg', volume: 0.5 },
+    { atMs: ${beats.firstPunch[0]*1000|0}, url: 'https://actions.google.com/sounds/v1/impacts/crash_impact_sweetener.ogg', volume: 0.9 },
+    { atMs: ${beats.stagger[0]*1000|0},  url: 'https://actions.google.com/sounds/v1/cartoon/woodblock_hit.ogg', volume: 0.6 }
+  ];
+This array is the ONLY thing the render engine reads for audio — it does
+not listen for actual <audio> playback or live Web Audio nodes during
+frame capture. If this array is missing or empty, the exported video will
+be silent, so it must be present and cover the full timeline.
+
+============================================================
+SFX EXTRA GUARDRAILS — this is the single area builds go wrong most
+often. Read every line below, it is not optional context.
+============================================================
+- DO NOT build any "enable sound" / "tap to unlock audio" / "click
+  anywhere to start" overlay, button, or gesture-gate of any kind, and do
+  NOT wait on a 'click', 'touchstart', or 'pointerdown' event before
+  starting anything audio-related. This pattern exists in normal web dev
+  because browsers block autoplay until a user gesture — but there is no
+  user here: the render engine opens the file and captures frames on a
+  fixed schedule with nobody available to click anything. If you gate
+  audio (or animation) behind a click, the render engine will simply
+  never see that click, the gate will never open, and the clip will
+  either play silently or freeze on frame 0 forever. window.__mfSoundCues
+  is read directly by the render engine without ever "playing" audio in
+  the page at all, so no unlock step is needed or wanted.
+- DO NOT render any visible sound-related UI in the frame at all — no
+  play/pause button, no mute/volume icon, no <audio controls> element, no
+  "sound on" badge. None of this is watched by anyone; it will just show
+  up as a stray UI element sitting in your otherwise clean motion graphic.
+- DO NOT call .play(), .pause(), fetch(), or new Audio(...) on any of
+  these URLs anywhere in your script, even "just to preload" or "just to
+  test." The render engine never executes real playback — it statically
+  reads the window.__mfSoundCues array before capture starts. Any actual
+  play attempt is dead code at best and a source of console errors/CORS
+  failures at worst; it does not make the exported audio work and is not
+  needed to make it work.
+- Every url in window.__mfSoundCues MUST come from the approved bank in
+  SOUND DESIGN SYSTEM above (all hosted at actions.google.com/sounds/v1/).
+  Do NOT use assets.mixkit.co, upload.wikimedia.org, freesound.org,
+  pixabay.com, kenney.nl, opengameart.org, or any other SFX host — these
+  all block the render engine's server-side fetch with HTTP 403, even for
+  real, correctly-formatted, currently-working URLs, because they detect
+  it isn't a browser. This has nothing to do with picking a better URL on
+  those sites; the host itself blocks the request. If none of the
+  categories in the approved bank quite fit, pick the closest one rather
+  than reaching for a different host.
+- Every url value must be a BARE URL STRING and nothing else — e.g.
+  'https://actions.google.com/sounds/v1/cartoon/pop.ogg'. It must start
+  with 'https://' and end with '.ogg', with no other characters before
+  or after it. Do NOT wrap it in markdown link syntax like
+  '[https://actions.google.com/sounds/v1/cartoon/pop.ogg](https://actions.google.com/sounds/v1/cartoon/pop.ogg)'.
+  If the copy of this prompt you are reading has rendered any of the
+  bank URLs above as a clickable markdown link (square brackets around
+  the visible text, followed by parentheses around the same URL again),
+  that is a rendering artifact of whatever surface displayed this
+  prompt to you — it is NOT part of the real URL. In that case take
+  only the raw 'https://...' text and discard every '[', ']', '(', ')'
+  character around it before writing the string literal. A url value
+  containing any of the characters [ ] ( ) is always wrong, with zero
+  exceptions, and will make the render engine's sound fetch fail
+  silently (no error, just no audio).
+- Every atMs must be a plain number of milliseconds from 0 up to and
+  including TOTAL_FRAMES/FPS*1000 (i.e. DURATION_SEC*1000) — never
+  negative, never beyond the clip's own length, never a string, never
+  left as a placeholder/example value copied verbatim from this prompt.
+- volume is always a plain number between 0 and 1 — never a string,
+  never a percentage like "50%", never omitted-as-undefined (omit the
+  key entirely if you want the default of 1, don't write volume: null or
+  volume: '').
+- window.__mfSoundCues must be a plain JSON-like array literal assigned
+  once — not generated by a loop that pushes to it conditionally, not
+  reassigned more than once, not left partially commented out. Read it
+  back after writing it and confirm it parses as a normal JS array with
+  every object having exactly atMs, url, and (optionally) volume as keys.
+
+============================================================
+COMMON FAILURE MODES — NONE OF THESE ARE ALLOWED IN YOUR OUTPUT
+============================================================
+This list exists because these exact mistakes are the most frequent ways
+this kind of build goes wrong. Before you write a single line, read every
+item. After you finish, re-scan your own file for each one by name:
+- Using setInterval for anything on the animation clock. NEVER use
+  setInterval. Only requestAnimationFrame + performance.now().
+- Starting the animation clock before document.fonts.ready resolves. If
+  you start early, frame 0 (and possibly several frames after) get
+  captured with a fallback font, which is a visible bug in the render.
+- Leaving html/body at their default size, or any size other than exactly
+  WIDTH_PX by HEIGHT_PX, or forgetting overflow:hidden on both.
+- Building more than one primary visual device, or letting a second
+
+  device's elements creep in "just as decoration."
+- A flat, static, single-color background. The background must visibly
+  drift/breathe for the ENTIRE duration, not just during one beat.
+- Flat-filled hero/headline text with no gradient, shadow, or edge
+  treatment — this is a hard requirement, not a suggestion.
+- Perfectly symmetrical, perfectly centered, evenly-gridded layouts with
+  no intentional offset anywhere.
+- A camera that sits idle (no scale/position change at all) at any point,
+  including — especially — during the HOLD beat.
+- Elements that all appear at the same exact timestamp instead of
+  staggering 0.1–0.3s apart.
+- Anything sitting 100% motionless (no drift, no breathing, no pulse) for
+  longer than 0.3–0.4s anywhere in the clip, including the HOLD.
+- Creating an AudioContext, OscillatorNode, GainNode, BiquadFilterNode, or
+  any <audio> element for sound. See SOUND DESIGN SYSTEM above — the ONLY
+  audio mechanism that survives export is window.__mfSoundCues.
+- Gating audio (or anything else) behind a "click/tap to enable sound"
+  overlay, a play button, or any wait-for-user-gesture pattern. There is
+  no user to click it during render — see SFX EXTRA GUARDRAILS above.
+- Rendering any visible play/pause/mute/volume UI element in the frame.
+- Calling .play(), new Audio(...), or fetch() on any SFX URL "to test" or
+  "to preload" it. The render engine never plays audio live — it only
+  reads window.__mfSoundCues as static data.
+- Using a URL from Mixkit, Wikimedia/Wikipedia, Freesound, Pixabay,
+  Kenney.nl, OpenGameArt, or any host outside the approved
+  actions.google.com/sounds/v1/ bank — these get blocked by the render
+  engine's own fetch (HTTP 403) regardless of whether the file is real.
+- Inventing, guessing, or reusing a fake/placeholder URL for a sound
+  effect. Every url in window.__mfSoundCues must come from the approved
+  bank in SOUND DESIGN SYSTEM above.
+- Writing a url value that still has markdown link formatting attached,
+  e.g. '[https://actions.google.com/sounds/v1/cartoon/pop.ogg](https://actions.google.com/sounds/v1/cartoon/pop.ogg)'
+  instead of the bare 'https://actions.google.com/sounds/v1/cartoon/pop.ogg'.
+  This silently breaks every sound cue and is one of the single most
+  common mistakes — always double check for stray [ ] ( ) characters.
+- Building window.__mfSoundCues incrementally inside a loop, a callback,
+  or an async handler. It must be one complete, static array assigned at
+  the top level of the script before the render begins.
+- A continuous ambient drone/hum/pad sound bed looping under the whole
+  clip. Only discrete, event-timed hits are allowed.
+- Any hardcoded pixel size, frame count, fps, or color that does not match
+  the NON-NEGOTIABLE NUMBERS block above exactly.
+- Returning explanation text, markdown fences, or commentary around the
+  code. Output must be the raw HTML file only, starting with <!DOCTYPE html>.
+- Splitting the file into separate pieces: a CSS block, then a fragment of
+  markup, then a separate JS block — whether as multiple code fences, or
+  as one fence containing disconnected chunks with prose in between. See
+  OUTPUT FORMAT at the very top of this prompt — there is exactly ONE
+  file, in ONE fence, with the CSS/markup/JS each in their normal place
+  inside it, and nothing else in your reply.
+- Writing an atMs value that is merely "close" to its visual event's real
+  trigger time instead of numerically identical to it — e.g. staggering
+  the visuals 0.25s apart in your code but leaving the sound cues at the
+  0.3s spacing suggested as a general example elsewhere in this prompt.
+  Even a 50-150ms mismatch reads as audio drifting out of sync with the
+  motion, and it gets worse with each subsequent staggered element. See
+  TIMING — SINGLE SOURCE OF TRUTH above.
+- Hand-rolling a full JS animation clock (your own cubic-bezier evaluator,
+  a single tick()/requestAnimationFrame loop driving every element's
+  inline transform every frame) when CSS @keyframes + animation-delay
+  would do the same job with one literal delay number per element instead
+  of two independently-typed numbers (one for the visual, one for the
+  sound) that can silently drift apart. Reserve hand-written JS timing for
+  counters, particle systems, and procedurally-drawn charts only.
+- Putting \`perspective\` and an animated scale/translateZ/rotateX transform
+  on the SAME element. Perspective only affects that element's children —
+  applying it to a self-transforming "camera" div makes any translateZ or
+  rotateX on that same div do nothing visually. See the two-wrapper
+  \`.stage\` / \`.camera-rig\` structure in CAMERA & MOTION SYSTEM above.
+- Cloning a node with cloneNode(true) for a motion-trail/ghost effect
+  without stripping \`id\` from the clone and its descendants first. This
+  puts duplicate ids in the live DOM for as long as the ghost exists.
+  Always removeAttribute('id') on the clone and every \`[id]\` descendant
+  before appending it.
+- Declaring the same timeline twice in two notations that can drift apart
+  — e.g. CSS custom properties in :root (\`--t-punchin: 0.64s\`) alongside
+  independent JS constants (\`const T_PUNCHIN = 640\`) used for setTimeout
+  or atMs. Pick one authoritative source of truth and derive the other
+  from it; never hand-maintain both. See TIMING — SINGLE SOURCE OF TRUTH
+  above.
+- Writing CSS @keyframes animations with no animation-play-state gating
+  at all, then putting an unrelated console.log or other no-op inside
+  document.fonts.ready.then() as if that alone delays anything. Unless
+  the \`* { animation-play-state: paused; }\` / \`body.ready * { ... running
+  }\` pair from MANDATORY BOILERPLATE is actually present in your CSS,
+  every animation in the file is still starting at parse time regardless
+  of what your JS does — this is the most common way "fonts.ready" gating
+  gets silently skipped.
+- Setting stroke-dasharray/stroke-dashoffset on an SVG circle to a value
+  that doesn't match its true circumference (2 * π * r for that exact
+  r) — this makes the draw-on reveal finish early and hold static for
+  the remainder of its own animation-duration instead of continuously
+  drawing.
+- Using a CSS property that doesn't exist (a typo or an invented name,
+  e.g. "margin-dash" instead of "margin-left"). The browser silently
+  ignores unknown properties with no console error, so this class of bug
+  shows up only as a visibly misaligned/off-center element, never as
+  broken code — worth a deliberate check, not just a syntax scan.
+
+============================================================
+MANDATORY BOILERPLATE — start your file from this exact skeleton and
+build everything else inside it. Do not restructure or omit any part of
+this skeleton; fill in the marked sections.
+============================================================
+\`\`\`html
+<!DOCTYPE html>
+<\!-- Device: [state your chosen device here]                                -->
+<\!-- Beats: [copy the exact timestamp breakdown from STORY BEATS above]     -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: ${w}px; height: ${h}px;
+    overflow: hidden;
+    background: #000; /* replaced by the animated background below */
+  }
+  /* MANDATORY font-gate: every @keyframes animation in this file must
+     stay paused until body.ready is added below. Do not remove or
+     narrow this — it must apply globally (the * selector), not to a
+     hand-picked list of elements. */
+  * { animation-play-state: paused; }
+  body.ready * { animation-play-state: running; }
+  /* ...your CSS goes here... */
+</style>
+</head>
+<body>
+  <div id="camera">
+    <\!-- ...your scene markup goes here, inside the camera container... -->
+  </div>
+
+  <script>
+    // window.__mfSoundCues MUST be declared here, synchronously, fully
+    // populated, before anything else runs. See SOUND DESIGN SYSTEM.
+    window.__mfSoundCues = [
+      // { atMs: 0, url: 'https://...', volume: 0.5 },
+    ];
+
+    const DURATION_MS = ${Math.round(duration*1000)};
+    let startTime = null;
+
+    function frame(now){
+      if (startTime === null) startTime = now;
+      const elapsedMs = now - startTime;
+      const t = Math.min(elapsedMs / DURATION_MS, 1); // 0..1 progress
+      // ...drive any JS-controlled values (counters, chart draw, etc)
+      // off of elapsedMs / t here. Do not use setInterval anywhere.
+      if (elapsedMs < DURATION_MS) requestAnimationFrame(frame);
+    }
+
+    document.fonts.ready.then(() => {
+      requestAnimationFrame(frame);
+      document.body.classList.add('ready'); // this releases the
+                                             // \`* { animation-play-state:
+                                             // paused }\` rule above —
+                                             // every CSS @keyframes
+                                             // animation in the file
+                                             // starts on this exact frame
+    });
+  <\/script>
+</body>
+</html>
+\`\`\`
+Notes on the skeleton:
+- The \`* { animation-play-state: paused; }\` / \`body.ready * { ... running
+  }\` pair in the CSS above is not optional boilerplate to trim — it is
+  the mechanism that makes "gate CSS keyframes on body.ready" actually
+  true. Adding the \`ready\` class without those two CSS rules existing
+  does nothing; the animations were never paused in the first place, so
+  there is nothing for the class to "release." Confirm both rules are
+  present in your final file, not just the classList.add call.
+- Everything JS-driven (counters, chart line progress, particle systems)
+  must derive its value from elapsedMs/t inside that one frame() loop —
+  do not spin up a second independent timing mechanism.
+
+============================================================
+BUILD REQUIREMENTS
+============================================================
+- Single self-contained HTML file. html and body are exactly ${w}px by
+  ${h}px with overflow:hidden.
+- No restrictions on modern CSS — filter, box-shadow, backdrop-filter,
+  blend modes, and real 3D transforms (perspective/rotateX/rotateY/
+  translateZ) are all fine to use if the device calls for them. Use
+  whichever produces the best-looking result; you do not need to fake
+  effects that a real filter or shadow would do better.
+- Prefer CSS @keyframes + animation-delay + animation-fill-mode: forwards
+  for anything on a fixed timeline. Use JS (requestAnimationFrame +
+  performance.now(), never setInterval) only for counters, particle
+  systems, or anything that needs a running numeric value.
+- Self-drawing lines/charts/rings animate via stroke-dasharray /
+  stroke-dashoffset on an SVG path or circle. For a circle specifically,
+  stroke-dasharray and the starting stroke-dashoffset MUST both equal the
+  circle's actual circumference — compute it as 2 * π * r using the exact
+  same r you set as the circle's radius attribute, don't estimate or
+  round to a "nice" number. A dasharray that doesn't match the true
+  circumference makes the draw-on animation finish visibly early (the
+  ring appears fully drawn partway through its own animation-duration,
+  then just sits there doing nothing for the remainder) or, if too
+  small, never fully closes. Example for a circle with r="240":
+  circumference = 2 * Math.PI * 240 ≈ 1507.96 — use that computed value
+  (e.g. 1507.96 or a JS-computed constant), not a rounder guess like 1500
+  or 1760.
+- When centering an absolutely-positioned element on a point (top: 50%;
+  left: 50%; then offsetting back by half its own size), the two
+  properties are margin-top and margin-left (both set to -half the
+  element's own width/height) — there is no "margin-dash" or similar
+  invented shorthand. Only use CSS properties that actually exist; if
+  you are not certain a property name is real, use the standard one for
+  the effect you want instead of guessing. A typoed/invented property is
+  silently ignored by the browser with no error, so this class of
+  mistake will not show up as broken code — only as a visibly
+  off-center element — which makes it worth a deliberate second look
+  rather than assuming spell-check would have caught it.
+- Explicitly wait on document.fonts.ready before starting the animation
+  clock, so no frame is captured mid font-swap. A console.log or other
+  side-effect-free callback inside document.fonts.ready.then() does NOT
+  satisfy this requirement by itself — if your CSS @keyframes animations
+  have no animation-play-state gating anywhere in your stylesheet, they
+  are still starting unconditionally at parse time regardless of what
+  your JS does inside .then(). Use this exact two-rule pattern, which
+  requires zero per-element bookkeeping and cannot be gotten wrong no
+  matter how many animated elements the file has:
+    * { animation-play-state: paused; }
+    body.ready * { animation-play-state: running; }
+  Put those two rules in your stylesheet (the second must come after the
+  first so it wins the cascade), and add \`document.body.classList.add
+  ('ready')\` inside document.fonts.ready.then() as shown in the skeleton
+  below. Every single @keyframes animation in the file — background,
+  camera rig, core/badge reveals, node pops, ring draws, caption — is
+  paused by the first rule and released simultaneously by the second the
+  moment fonts resolve. Do not attempt to gate animations individually
+  per-selector; the global \`* / body.ready *\` pair above is the reliable
+  version of that idea.
+- No external image URLs — base64 or pure CSS/SVG only, unless the user
+  supplies specific image assets separately.
+- Put a comment block at the very top of the file with: which device you
+  picked (if auto), and the full timestamp breakdown copied from above.
+- Populate window.__mfSoundCues (see SOUND DESIGN SYSTEM above) with a cue
+  for every animation event on the timeline — this is required, not
+  optional, and it's how the exported video ends up with an audio track.
+
+============================================================
+FINAL SELF-AUDIT — MANDATORY, DO THIS AFTER YOU FINISH WRITING THE FILE,
+BEFORE YOU RETURN IT
+============================================================
+Do not treat this as a mental formality. Actually re-open and re-read the
+file you just wrote, line by line, against this checklist. For every box
+that does not clearly pass, go back and fix the code, then re-check it —
+do not return the file with a known failing item.
+
+[ ] Exactly one primary visual device is used — nothing else stacked on top of it.
+[ ] The background is not flat black/static — it visibly drifts or breathes for the FULL ${duration.toFixed(1)}s, not just one beat.
+[ ] Every entrance has real personality (overshoot, snap, mask-reveal) — no plain fade-and-stop anywhere. A scale/opacity ramp that only ever eases toward its final value (never briefly overshoots past it, e.g. 0 → 1.15 → 1.0) does not count as overshoot — check your own easing math actually produces a value beyond the target before settling, not just a smooth approach to it.
+[ ] Every structural piece of the primary device — including outer rings, frames, or containers, not just the badges/nodes/numbers inside them — has its own entrance animation. Nothing belonging to the device is allowed to simply be present at full opacity from frame 0 while only its children animate in.
+[ ] Hero text uses a gradient/shadow/edge treatment — never a flat CSS color.
+[ ] Layout has intentional asymmetry somewhere — not everything is dead-center/evenly spaced.
+[ ] The camera is doing something (push, punch, pull) at every single moment of the clip, including the hold.
+[ ] At least one hard punch-in/pull-out camera move exists between beats — not just a slow drift.
+[ ] Nothing in the frame is 100% static for more than 0.3-0.4s, even during the HOLD beat.
+[ ] document.fonts.ready is awaited before ANY animation clock (CSS or JS) starts — search your own file for every @keyframes trigger and every requestAnimationFrame call and confirm each is gated behind it. Specifically: confirm your CSS contains both \`* { animation-play-state: paused; }\` AND \`body.ready * { animation-play-state: running; }\`, and that \`document.body.classList.add('ready')\` is inside document.fonts.ready.then(). If either CSS rule is missing, having the classList.add call does nothing — the animations were never paused, so check for the rules themselves, not just the JS line.
+[ ] Every SVG circle used for a self-drawing ring/progress effect has stroke-dasharray and starting stroke-dashoffset set to its true circumference (2 * π * r for its actual r) — recompute it yourself from the r value in your own markup rather than trusting whatever number you first wrote.
+[ ] Every hard punch-in and every hard pull-out/exit beat has an actual motion-trail effect fired on it (per CAMERA & MOTION SYSTEM) — search your own file for a trail/ghost-spawning function and confirm it is called at both of those moments, not just defined and left unused.
+[ ] Every CSS property you used is a real property — re-read your own stylesheet property-by-property and flag anything unfamiliar (a typo or invented name like "margin-dash") for the correct standard property instead; the browser won't error on this, so only your own re-read will catch it.
+[ ] Search your own file for the literal string "setInterval" — it must not appear anywhere.
+[ ] html and body are both exactly ${w}px by ${h}px with overflow:hidden — check the literal numbers in your CSS, not just that a rule exists.
+[ ] The file is a single, self-contained HTML document, valid from <!DOCTYPE html> to </html>, with no explanation text or markdown fences around it.
+[ ] Your reply contains exactly ONE code fence and ONE file — count them. If your CSS, markup, or JS ever appear as separate blocks, or if there is any prose between blocks, merge everything into the single file before responding; a reply with 2+ fences or any fragment outside a fence has failed this task.
+[ ] Every sound in window.__mfSoundCues is a (SLEEK) entry from the bank — not a (CARTOONY) one and not a (TENSE — AVOID) one — unless the requested vibe explicitly asked for something playful/comedic or dark/thriller, respectively. Re-check each url against the SOUND AESTHETIC tags above one by one: a cartoon whistle/boing/xylophone run on a premium clip is the wrong kind of mismatch (too silly), and a foreboding/suspense/slam/sweep-down cue on a premium clip is also the wrong kind of mismatch (too horror/thriller) — both must be swapped for the SLEEK alternative in the same category.
+[ ] No url in window.__mfSoundCues is one of the entries marked "(AMBIENT — DO NOT USE AS A CUE)" — those are long looping beds, not discrete hits, and firing one at a single atMs timestamp is always wrong.
+[ ] For every entry in window.__mfSoundCues, find the exact line of code that triggers the corresponding visual event (a CSS animation-delay value, or the JS condition/constant that starts it) and confirm the atMs is the identical number in milliseconds — not close, not rounded, not left over from an earlier draft of the timing. Do this one by one for every cue; this is the single most common source of audio drifting out of sync with the visuals. See TIMING — SINGLE SOURCE OF TRUTH above.
+[ ] window.__mfSoundCues is declared synchronously at the top level (not inside a function, loop, or async callback) and has a cue for every single animation event on the timeline — nothing animates silently.
+[ ] Every URL in window.__mfSoundCues is copied character-for-character from the approved bank — not retyped from memory, not a similar-looking filename you assumed exists.
+[ ] Every url value in window.__mfSoundCues is a bare 'https://...ogg' string with NO '[', ']', '(', or ')' characters anywhere in it — search your own file for these four characters inside the __mfSoundCues array specifically and fix any hit. A url wrapped as [text](url) is broken even though it looks almost right.
+[ ] Every custom font-family used anywhere in the CSS (e.g. Unbounded, Poppins) has a matching Google Fonts <link> or @import actually present in <head> — a font-family that is declared but never loaded silently falls back to a default font and breaks the intended look with no error.
+[ ] Every URL in window.__mfSoundCues is copied exactly from the approved actions.google.com/sounds/v1/ bank in SOUND DESIGN SYSTEM above — none are from Mixkit, Wikimedia, Freesound, Pixabay, Kenney.nl, OpenGameArt, or any other host.
+[ ] There is no "click/tap to enable sound," play button, mute toggle, or any other audio-permission UI anywhere in the markup, and nothing waits on a click/touchstart/pointerdown event before starting audio or animation.
+[ ] Search your own file for ".play(", "new Audio(", and a stray "fetch(" aimed at any SFX url — none of these should appear; window.__mfSoundCues is read as static data only, never actually played back in-page.
+[ ] Search your own file for the literal strings "AudioContext", "createOscillator", "GainNode", and "<audio" — all four searches must come up empty.
+[ ] There is no continuous ambient drone/hum/pad looping under the clip — only discrete, event-timed hits. If it would sound like background static or a buzzing tone on its own, cut it.
+[ ] Every numeric value for width, height, fps, and duration in the code matches the NON-NEGOTIABLE NUMBERS block exactly — re-grep your own file for the width/height in px and the duration in ms/s and compare them against WIDTH_PX/HEIGHT_PX/DURATION_SEC.
+[ ] The top-of-file comment states which device was used (if auto) and the beat timestamp breakdown, copied from STORY BEATS above.
+
+If you could recreate this draft by dragging a few elements onto a
+drag-and-drop template in five minutes, it has not cleared the bar — go
+back and add the specific, hand-crafted details this prompt describes.
+Only return the file once every single box above genuinely passes.`;
+}
+
+document.getElementById('btnCompose').addEventListener('click', ()=>{
+  const text = composePrompt();
+  document.getElementById('promptOut').value = text;
+  document.getElementById('outputPanel').classList.add('show');
+  document.getElementById('promptOut').scrollIntoView({behavior:'smooth', block:'nearest'});
+});
+
+document.getElementById('btnCopy').addEventListener('click', async ()=>{
+  const ta = document.getElementById('promptOut');
+  try{
+    await navigator.clipboard.writeText(ta.value);
+  }catch(e){
+    ta.select(); document.execCommand('copy');
+  }
+  const toast = document.getElementById('toast');
+  toast.classList.add('show');
+  setTimeout(()=>toast.classList.remove('show'), 1600);
+});
+
+document.getElementById('btnDownload').addEventListener('click', ()=>{
+  const blob = new Blob([document.getElementById('promptOut').value], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'motion-forge-prompt.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
