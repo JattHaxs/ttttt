@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Render Engine</title>
+
+<link rel="icon" href="https://res.cloudinary.com/dl7vrgenz/image/upload/v1747967163/ghummaneditor_h0v1sk.png" type="image/png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@latest/build/mp4-muxer.js"></script>
+
+<style>
+  :root{
+    --void:#08090b;
+    --panel:#0e1114;
+    --panel2:#14181c;
+    --cyan:#00f5ff;
+    --cyan-dim:#0aa8b3;
+    --cyan-deep:#043b40;
+    --violet:#7c5cff;
+    --ink:#e6f6f7;
+    --muted:#7a8a90;
+    --line: rgba(0,245,255,0.14);
+    --danger:#ff2e63;
+    --ok:#37e29a;
+    --radius:6px;
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; font-family:'JetBrains Mono', monospace; }
+  html{ background:var(--void); }
+
+  body{
+    background: var(--void);
+    color: var(--ink);
+    min-height:100vh;
+    overflow-x:hidden;
+    display:flex; justify-content:center; align-items:flex-start;
+    padding: 6vh 4vw 6vh;
+    cursor:none;
+  }
+  @media (max-width: 900px){ body{ cursor:auto; padding: 4vh 4vw; } }
+
+  ::selection{ background: var(--cyan); color:#000; }
+  *{ scrollbar-width: thin; scrollbar-color: var(--cyan-dim) var(--void); }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-track{ background: var(--void); }
+  ::-webkit-scrollbar-thumb{ background: var(--cyan-deep); border-radius:0; }
+
+  .cursor-dot, .cursor-ring{
+    position:fixed; top:0; left:0; pointer-events:none; z-index:9999;
+    transform:translate(-50%,-50%); mix-blend-mode:difference;
+  }
+  .cursor-dot{ width:5px; height:5px; background:var(--cyan); border-radius:50%; }
+  .cursor-ring{ width:32px; height:32px; border:1px solid var(--cyan); border-radius:50%; transition: width .25s, height .25s, background .25s; }
+  .cursor-ring.active{ width:56px; height:56px; background: rgba(0,245,255,0.08); }
+  @media (max-width:900px){ .cursor-dot,.cursor-ring{ display:none; } }
+
+  .scanlines{
+    position:fixed; inset:0; z-index:60; pointer-events:none; opacity:.5;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,0.018) 0px, rgba(255,255,255,0.018) 1px, transparent 1px, transparent 3px);
+  }
+  .vignette{
+    position:fixed; inset:0; z-index:59; pointer-events:none;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.6) 100%);
+  }
+  .grain{
+    position:fixed; inset:0; z-index:58; pointer-events:none; opacity:.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  body::before{
+    content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background: radial-gradient(circle at 20% 0%, rgba(0,245,255,0.06), transparent 45%),
+                radial-gradient(circle at 100% 100%, rgba(124,92,255,0.07), transparent 50%);
+  }
+
+  .font-display{ font-family:'Unbounded', sans-serif; }
+  .eyebrow{
+    font-size:.68rem; letter-spacing:.24em; text-transform:uppercase; color:var(--cyan);
+    display:flex; align-items:center; gap:.55rem;
+  }
+  .eyebrow::before{ content:''; width:18px; height:1px; background:var(--cyan); display:inline-block; }
+
+  .reveal{ opacity:0; transform:translateY(14px); animation: rise .7s cubic-bezier(.16,1,.3,1) forwards; }
+  @keyframes rise{ to{ opacity:1; transform:translateY(0); } }
+
+  #deck{ width:1320px; max-width:100%; position:relative; z-index:1; }
+
+  header#topbar{
+    display:flex; justify-content:space-between; align-items:flex-end; gap:20px;
+    padding-bottom:22px; margin-bottom:26px; border-bottom:1px solid var(--line);
+  }
+  #title{
+    font-size: clamp(1.5rem, 2.8vw, 2.2rem); font-weight:800; margin-top:8px;
+    color:var(--ink); text-shadow: 0 0 22px rgba(0,245,255,.35);
+    letter-spacing:-.01em;
+  }
+  #backlink{
+    font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+    text-decoration:none; display:inline-flex; align-items:center; gap:6px; margin-top:6px;
+    transition:color .2s;
+  }
+  #backlink:hover{ color:var(--cyan); }
+  #clockbox{ text-align:right; }
+  #time{ font-size:1.3rem; color:var(--cyan); font-weight:600; font-variant-numeric:tabular-nums; }
+  #date{ font-size:.68rem; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); margin-top:4px; }
+
+  #grid{ display:grid; grid-template-columns:1.35fr 1fr; gap:22px; align-items:start; }
+  @media (max-width:980px){ #grid{ grid-template-columns:1fr; } #deck{ padding:0; } }
+
+  .panel{
+    background: linear-gradient(180deg, rgba(20,24,28,.6), rgba(14,17,20,.5));
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px; backdrop-filter: blur(6px);
+  }
+  .panel + .panel{ margin-top:18px; }
+  .panel-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+  .panel-head-left{ display:flex; align-items:center; gap:10px; }
+  .panel-head i{ color:var(--cyan); font-size:.85rem; }
+  .panel-head h3{
+    font-size:.72rem; letter-spacing:.2em; text-transform:uppercase; color:var(--ink); font-weight:600;
+  }
+
+  #codeArea{
+    width:100%; height:360px; resize:vertical; background:#04070a; border:1px solid var(--line);
+    border-radius:var(--radius); color:var(--ink); font-size:.78rem; line-height:1.55; padding:14px;
+    outline:none; tab-size:2;
+  }
+  #codeArea:focus{ border-color:var(--cyan); box-shadow:0 0 22px rgba(0,245,255,.12); }
+
+  .toolbar{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn{
+    padding:10px 14px; background:#04070a; border:1px solid var(--line); border-radius:var(--radius);
+    color:var(--ink); cursor:pointer; font-size:.7rem; letter-spacing:.08em; text-transform:uppercase;
+    transition: border-color .25s, background .25s, color .25s; display:inline-flex; align-items:center; gap:8px;
+  }
+  .btn i{ color:var(--cyan); }
+  .btn:hover{ border-color:var(--cyan); background:rgba(0,245,255,.06); }
+  .btn:disabled{ opacity:.35; cursor:not-allowed; }
+  .btn:disabled:hover{ border-color:var(--line); background:#04070a; }
+  .btn-primary{ background:var(--cyan); color:#04191b; border:none; font-weight:600; }
+  .btn-primary:hover{ filter:brightness(1.1); background:var(--cyan); }
+  .btn-primary:disabled{ background:var(--cyan-deep); color:#0a2224; }
+  .btn-danger{ border-color:rgba(255,46,99,.4); }
+  .btn-danger i{ color:var(--danger); }
+  .btn-danger:hover{ border-color:var(--danger); background:rgba(255,46,99,.06); }
+  .btn-block{ width:100%; justify-content:center; }
+
+  .field{ margin-bottom:14px; }
+  .field:last-child{ margin-bottom:0; }
+  .field label{
+    display:block; font-size:.65rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+    margin-bottom:6px;
+  }
+  .field select, .field input[type=number], .field input[type=text]{
+    width:100%; padding:10px 12px; background:#04070a; border:1px solid var(--line); border-radius:var(--radius);
+    color:var(--ink); font-size:.78rem; outline:none; transition:border-color .2s;
+  }
+  .field select:focus, .field input:focus{ border-color:var(--cyan); }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+  #previewWrap{
+    width:100%; overflow:hidden; border:1px solid var(--line); border-radius:var(--radius);
+    background:#000; position:relative; margin-bottom:12px;
+  }
+  #previewInner{ position:relative; }
+  #previewFrame{ border:none; display:block; background:#000; transform-origin: top left; }
+  #previewEmpty{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:10px; color:var(--muted); font-size:.7rem; letter-spacing:.1em;
+    text-transform:uppercase; text-align:center; padding:20px;
+  }
+  #previewEmpty i{ font-size:1.4rem; color:var(--cyan-dim); }
+
+  #scrubRow{ display:flex; align-items:center; gap:10px; }
+  #scrub{ flex:1; accent-color:var(--cyan); }
+  #scrubTime{ font-size:.68rem; color:var(--cyan); min-width:78px; text-align:right; }
+
+  .statRow{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:9px 0; border-top:1px solid var(--line); font-size:.7rem;
+    letter-spacing:.05em; text-transform:uppercase; color:var(--muted);
+  }
+  .statRow:first-of-type{ border-top:none; }
+  .statRow span:last-child{ color:var(--cyan); font-weight:600; }
+
+  #progressOuter{
+    width:100%; height:8px; background:#04070a; border:1px solid var(--line); border-radius:999px;
+    overflow:hidden; margin:12px 0 8px;
+  }
+  #progressInner{ height:100%; width:0%; background:linear-gradient(90deg,var(--cyan-dim),var(--cyan)); transition:width .15s linear; }
+  #progressLabel{ font-size:.68rem; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; display:flex; justify-content:space-between; }
+  #progressLabel span:last-child{ color:var(--cyan); }
+
+  #log{
+    height:140px; overflow-y:auto; background:#04070a; border:1px solid var(--line); border-radius:var(--radius);
+    padding:10px 12px; font-size:.68rem; line-height:1.7; color:var(--muted);
+  }
+  #log .l-ok{ color:var(--ok); }
+  #log .l-err{ color:var(--danger); }
+  #log .l-warn{ color:#ffb84d; }
+  #log .l-cyan{ color:var(--cyan); }
+
+  #outputPanel{ display:none; }
+  #outputPanel.show{ display:block; }
+  #outputVideo{ width:100%; border-radius:var(--radius); border:1px solid var(--line); background:#000; margin-bottom:12px; }
+
+  .badge{
+    display:inline-flex; align-items:center; gap:6px; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
+    border:1px solid var(--line); border-radius:999px; padding:3px 10px; color:var(--muted);
+  }
+  .badge.ok{ border-color:rgba(55,226,154,.4); color:var(--ok); }
+  .badge.warn{ border-color:rgba(255,184,77,.4); color:#ffb84d; }
+  .badge.err{ border-color:rgba(255,46,99,.4); color:var(--danger); }
+
+  #supportBanner{
+    display:none; align-items:center; gap:10px; padding:12px 16px; border:1px solid rgba(255,46,99,.4);
+    background:rgba(255,46,99,.06); border-radius:var(--radius); margin-bottom:18px; font-size:.72rem; color:var(--ink);
+  }
+  #supportBanner.show{ display:flex; }
+  #supportBanner i{ color:var(--danger); }
+
+  #capList{ list-style:none; display:flex; flex-direction:column; gap:7px; }
+  #capList li{ font-size:.68rem; color:var(--muted); display:flex; gap:8px; align-items:flex-start; }
+  #capList b{ min-width:52px; font-size:.6rem; letter-spacing:.08em; padding:2px 6px; border-radius:4px; text-align:center; height:fit-content; }
+  #capList .yes b{ color:var(--ok); border:1px solid rgba(55,226,154,.35); }
+  #capList .no b{ color:var(--danger); border:1px solid rgba(255,46,99,.35); }
+
+  #legend{
+    margin-top:26px; padding-top:16px; border-top:1px solid var(--line);
+    font-size:.65rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+    display:flex; flex-wrap:wrap; gap:6px 18px; justify-content:space-between;
+  }
+  #legend b{ color:var(--cyan); }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.001s !important; transition-duration:.001s !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cursor-dot" id="cdot"></div>
+<div class="cursor-ring" id="cring"></div>
+<div class="scanlines"></div>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<div id="deck">
+
+  <header id="topbar" class="reveal">
+    <div>
+      <p class="eyebrow">LOCAL RENDER NODE · NO DEPLOY</p>
+      <h1 id="title" class="font-display">MOTION FORGE</h1>
+      <a id="backlink" href="./dashboard.html"><i class="fa-solid fa-arrow-left"></i>Back to Console</a>
+    </div>
+    <div id="clockbox">
+      <div id="time">--:--:--</div>
+      <div id="date">-- --- ----</div>
+    </div>
+  </header>
+
+  <div id="supportBanner"><i class="fa-solid fa-triangle-exclamation"></i>
+    <span>Your browser doesn't support the WebCodecs API needed to render. Open this file in a recent version of Chrome or Edge.</span>
+  </div>
+
+  <div id="grid">
+
+    <!-- LEFT -->
+    <div>
+      <div class="panel reveal" style="animation-delay:.05s">
+        <div class="panel-head">
+          <div class="panel-head-left"><i class="fa-solid fa-code"></i><h3>Composition Source</h3></div>
+          <span class="badge">HTML + CSS + JS</span>
+        </div>
+        <textarea id="codeArea" spellcheck="false"></textarea>
+        <div class="toolbar">
+          <button class="btn" id="btnSample"><i class="fa-solid fa-wand-magic-sparkles"></i>Load Sample</button>
+          <button class="btn" id="btnClear"><i class="fa-solid fa-eraser"></i>Clear</button>
+          <button class="btn btn-primary" id="btnLoad"><i class="fa-solid fa-satellite-dish"></i>Load Composition</button>
+        </div>
+      </div>
+
+      <div class="panel reveal" style="animation-delay:.1s">
+        <div class="panel-head"><div class="panel-head-left"><i class="fa-solid fa-display"></i><h3>Live Preview</h3></div></div>
+        <div id="previewWrap">
+          <div id="previewInner">
+            <iframe id="previewFrame" title="composition preview"></iframe>
+          </div>
+          <div id="previewEmpty"><i class="fa-solid fa-satellite-dish"></i>Load a composition to preview it here</div>
+        </div>
+        <div id="scrubRow">
+          <button class="btn" id="btnPlay" style="padding:8px 12px;"><i class="fa-solid fa-play" id="playIcon"></i></button>
+          <input type="range" id="scrub" min="0" max="8000" value="0" step="1">
+          <span id="scrubTime">0.00 / 8.00s</span>
+        </div>
+      </div>
+
+      <div class="panel reveal" style="animation-delay:.14s">
+        <div class="panel-head"><div class="panel-head-left"><i class="fa-solid fa-shield-halved"></i><h3>Render Fidelity</h3></div></div>
+        <ul id="capList">
+          <li class="yes"><b>GOOD</b> transforms, opacity, gradients, box/text-shadow, clip-path, masks, mix-blend-mode, backdrop-filter, CSS filter(), custom fonts — rendered by Chrome's real layout engine, not reimplemented</li>
+          <li class="yes"><b>GOOD</b> keyframes, animation-delay stagger, Web Animations API, requestAnimationFrame loops, setTimeout/setInterval, performance.now(), Date.now()</li>
+          <li class="yes"><b>GOOD</b> canvas 2D / WebGL content and &lt;video&gt; frames — snapshotted each frame and composited into the export</li>
+          <li class="yes"><b>GOOD</b> audio — a composition can declare <code>window.__mfSoundCues</code> (timed sound effects, each as a URL <i>or</i> an inline base64 string); they're fetched/decoded, mixed, AAC-encoded, and muxed into the exported MP4 as a real audio track</li>
+          <li class="no"><b>LIMITED</b> cross-origin images/fonts/video without CORS headers still can't be pulled in — that's a browser security wall, not a capture-engine gap. Self-host or use CORS-enabled hosts / base64 data URLs</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <div class="panel reveal" style="animation-delay:.08s">
+        <div class="panel-head"><div class="panel-head-left"><i class="fa-solid fa-sliders"></i><h3>Render Settings</h3></div></div>
+        <div class="field">
+          <label>Resolution</label>
+          <select id="selRes">
+            <option value="1920x1080" selected>1920 × 1080 — 1080p</option>
+            <option value="1280x720">1280 × 720 — 720p</option>
+            <option value="3840x2160">3840 × 2160 — 4K</option>
+            <option value="1080x1920">1080 × 1920 — Vertical / Shorts</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Frame Rate</label>
+            <select id="selFps">
+              <option value="24">24 fps</option>
+              <option value="30" selected>30 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Duration (sec)</label>
+            <input type="number" id="inDuration" value="8" min="1" max="120" step="0.5">
+          </div>
+        </div>
+        <div class="field">
+          <label>Output Filename</label>
+          <input type="text" id="inFilename" value="motion-forge-render">
+        </div>
+      </div>
+
+      <div class="panel reveal" style="animation-delay:.12s">
+        <div class="panel-head"><div class="panel-head-left"><i class="fa-solid fa-film"></i><h3>Render</h3></div></div>
+        <button class="btn btn-primary btn-block" id="btnRender" disabled><i class="fa-solid fa-circle-play"></i>Render Video</button>
+        <button class="btn btn-danger btn-block" id="btnCancel" style="display:none; margin-top:8px;"><i class="fa-solid fa-xmark"></i>Cancel Render</button>
+        <div id="progressOuter"><div id="progressInner"></div></div>
+        <div id="progressLabel"><span id="progressText">Idle</span><span id="progressPct">0%</span></div>
+        <div class="statRow"><span>Total Frames</span><span id="statFrames">—</span></div>
+        <div class="statRow"><span>Est. File</span><span id="statSize">—</span></div>
+      </div>
+
+      <div class="panel reveal" id="outputPanel" style="animation-delay:.16s">
+        <div class="panel-head"><div class="panel-head-left"><i class="fa-solid fa-clapperboard"></i><h3>Output</h3></div></div>
+        <video id="outputVideo" controls></video>
+        <a class="btn btn-primary btn-block" id="btnDownload" download><i class="fa-solid fa-download"></i>Download MP4</a>
+      </div>
+
+      <div class="panel reveal" style="animation-delay:.2s">
+        <div class="panel-head"><div class="panel-head-left"><i class="fa-solid fa-terminal"></i><h3>Console</h3></div></div>
+        <div id="log"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer id="legend" class="reveal" style="animation-delay:.24s">
+    <span>Renders entirely in-browser · nothing uploaded anywhere</span>
+    <span><b>MP4 / H.264 (+ AAC audio when cues are declared)</b> via WebCodecs + mp4-muxer</span>
+  </footer>
+
+</div>
+
+<script>
+/* ================= Custom cursor ================= */
+const cdot = document.getElementById('cdot');
+const cring = document.getElementById('cring');
+let mx=0,my=0, rx=0, ry=0;
+window.addEventListener('mousemove', e=>{
+  mx=e.clientX; my=e.clientY;
+  cdot.style.left = mx+'px'; cdot.style.top = my+'px';
+});
+(function ringLoop(){
+  rx += (mx-rx)*0.18; ry += (my-ry)*0.18;
+  cring.style.left = rx+'px'; cring.style.top = ry+'px';
+  requestAnimationFrame(ringLoop);
+})();
+document.querySelectorAll('a,button,input,select').forEach(el=>{
+  el.addEventListener('mouseenter', ()=> cring.classList.add('active'));
+  el.addEventListener('mouseleave', ()=> cring.classList.remove('active'));
+});
+
+/* ================= Clock ================= */
+const timeEl = document.getElementById('time');
+const dateEl = document.getElementById('date');
+function tickClock(){
+  const now = new Date();
+  timeEl.textContent = now.toLocaleTimeString([], {hour12:false});
+  dateEl.textContent = now.toLocaleDateString([], {weekday:'short', month:'short', day:'2-digit', year:'numeric'}).toUpperCase();
+}
+tickClock(); setInterval(tickClock, 1000);
+
+/* ================= Logging ================= */
+const logEl = document.getElementById('log');
+function log(msg, cls){
+  const row = document.createElement('div');
+  if(cls) row.className = cls;
+  const ts = new Date().toLocaleTimeString([], {hour12:false});
+  row.textContent = '['+ts+'] '+msg;
+  logEl.appendChild(row);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ================= Support check ================= */
+const supported = (typeof VideoEncoder !== 'undefined') && (typeof window.Mp4Muxer !== 'undefined');
+if(!supported){
+  document.getElementById('supportBanner').classList.add('show');
+  log('WebCodecs / mp4-muxer unavailable in this browser.', 'l-err');
+}
+
+/* ================= Time-control payload injected into the composition iframe =================
+   This gives us a virtual clock so we can scrub or step through the composition
+   frame-by-frame regardless of real time — CSS animations/transitions/WAAPI are seeked
+   directly via document.getAnimations(), and requestAnimationFrame + setTimeout/setInterval
+   + performance.now()/Date.now() are all rerouted through the same virtual clock so
+   JS-driven animation loops stay in sync too. */
+const TIME_CONTROL_SRC = `
+(function(){
+  var vt = 0;
+  var rafQ = [];
+  var rafId = 1;
+  var timers = [];
+  var timerId = 1;
+  var dateBase = Date.now();
+
+  window.requestAnimationFrame = function(cb){
+    var id = rafId++;
+    rafQ.push({id:id, cb:cb});
+    return id;
+  };
+  window.cancelAnimationFrame = function(id){
+    rafQ = rafQ.filter(function(r){ return r.id !== id; });
+  };
+  window.setTimeout = function(cb, delay){
+    var args = Array.prototype.slice.call(arguments, 2);
+    var id = timerId++;
+    timers.push({id:id, fireAt: vt + (delay||0), interval:null, cb:cb, args:args});
+    return id;
+  };
+  window.setInterval = function(cb, delay){
+    var args = Array.prototype.slice.call(arguments, 2);
+    var id = timerId++;
+    timers.push({id:id, fireAt: vt + (delay||0), interval:(delay||0), cb:cb, args:args});
+    return id;
+  };
+  window.clearTimeout = window.clearInterval = function(id){
+    timers = timers.filter(function(t){ return t.id !== id; });
+  };
+  performance.now = function(){ return vt; };
+  Date.now = function(){ return dateBase + vt; };
+
+  function runTimers(){
+    var guard = 0;
+    while(guard++ < 5000){
+      var due = null;
+      for(var i=0;i<timers.length;i++){
+        if(timers[i].fireAt <= vt){ due = timers[i]; break; }
+      }
+      if(!due) break;
+      if(due.interval === null){
+        timers = timers.filter(function(t){ return t.id !== due.id; });
+      } else {
+        due.fireAt += due.interval;
+        if(due.interval <= 0) due.fireAt = vt + 1;
+      }
+      try{ due.cb.apply(null, due.args); }catch(e){ console.error(e); }
+    }
+  }
+  function runRaf(){
+    var cbs = rafQ; rafQ = [];
+    cbs.forEach(function(r){ try{ r.cb(vt); }catch(e){ console.error(e); } });
+  }
+  function seekCss(){
+    try{
+      document.getAnimations().forEach(function(a){
+        try{
+          if(a.playState === 'running' || a.playState === 'pending') a.pause();
+          a.currentTime = vt;
+        }catch(e){}
+      });
+    }catch(e){}
+  }
+
+  window.__mfRenderFrame = function(ms){
+    vt = ms;
+    runTimers();
+    runRaf();
+    seekCss();
+  };
+  window.__mfReady = true;
+})();
+`;
+
+function injectTimeControl(html){
+  const tag = '<script>'+TIME_CONTROL_SRC+'<\/script>';
+  const doctypeRe = /<!DOCTYPE[^>]*>/i;
+  if(doctypeRe.test(html)) return html.replace(doctypeRe, m => m + tag);
+  return tag + html;
+}
+
+/* ================= Sample composition ================= */
+const SAMPLE_HTML = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:1920px;height:1080px;background:#08090b;overflow:hidden;font-family:'JetBrains Mono',monospace;}
+  .bg{position:absolute;inset:0;background:
+    radial-gradient(circle at 15% 20%, rgba(0,245,255,.12), transparent 40%),
+    radial-gradient(circle at 90% 85%, rgba(124,92,255,.10), transparent 45%);}
+  .grid{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(0,245,255,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,245,255,.05) 1px, transparent 1px);
+    background-size:64px 64px;}
+  .stage{position:relative;width:1920px;height:1080px;padding:120px;}
+  .eyebrow{font-size:22px;letter-spacing:.3em;text-transform:uppercase;color:#00f5ff;
+    opacity:0;animation:fadeUp .6s ease forwards;animation-delay:.2s;}
+  .title{font-family:'Unbounded',sans-serif;font-weight:800;font-size:96px;color:#e6f6f7;
+    margin-top:18px;letter-spacing:-.01em;
+    clip-path:inset(0 100% 0 0);animation:wipe 1s cubic-bezier(.16,1,.3,1) forwards;animation-delay:.4s;
+    text-shadow:0 0 40px rgba(0,245,255,.35);}
+  .sub{font-size:28px;color:#7a8a90;margin-top:14px;opacity:0;
+    animation:fadeUp .6s ease forwards;animation-delay:1.1s;}
+  .list{margin-top:70px;display:flex;flex-direction:column;gap:22px;}
+  .item{display:flex;align-items:center;gap:22px;padding:24px 28px;
+    background:linear-gradient(180deg, rgba(20,24,28,.7), rgba(14,17,20,.5));
+    border:1px solid rgba(0,245,255,.14);border-left:3px solid #00f5ff;border-radius:8px;
+    width:900px;opacity:0;transform:translateX(-40px);
+    animation:slideIn .7s cubic-bezier(.16,1,.3,1) forwards;}
+  .item .dot{width:14px;height:14px;border-radius:3px;background:#00f5ff;
+    box-shadow:0 0 18px rgba(0,245,255,.7);flex-shrink:0;}
+  .item span{font-size:30px;color:#e6f6f7;letter-spacing:.01em;}
+  .item:nth-child(1){animation-delay:1.3s;}
+  .item:nth-child(2){animation-delay:1.6s;}
+  .item:nth-child(3){animation-delay:1.9s;}
+  .item:nth-child(4){animation-delay:2.2s;}
+  .counter{position:absolute;bottom:120px;right:120px;text-align:right;opacity:0;
+    animation:fadeUp .6s ease forwards;animation-delay:2.6s;}
+  .counter .num{font-family:'Unbounded',sans-serif;font-weight:800;font-size:88px;color:#00f5ff;
+    text-shadow:0 0 30px rgba(0,245,255,.4);font-variant-numeric:tabular-nums;}
+  .counter .lbl{font-size:20px;letter-spacing:.2em;text-transform:uppercase;color:#7a8a90;margin-top:6px;}
+  .rule{position:absolute;bottom:96px;left:120px;height:2px;background:#00f5ff;width:0;
+    box-shadow:0 0 14px rgba(0,245,255,.6);
+    animation:draw 1s cubic-bezier(.16,1,.3,1) forwards;animation-delay:6s;}
+  .outro{position:absolute;bottom:60px;left:120px;font-size:26px;letter-spacing:.08em;color:#e6f6f7;
+    opacity:0;animation:fadeUp .6s ease forwards;animation-delay:6.6s;}
+  .outro b{color:#00f5ff;}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes wipe{to{clip-path:inset(0 0 0 0);}}
+  @keyframes slideIn{to{opacity:1;transform:translateX(0);}}
+  @keyframes draw{to{width:640px;}}
+</style></head>
+<body>
+  <div class="stage">
+    <div class="bg"></div><div class="grid"></div>
+    <div class="eyebrow">EDITENTIA · MONTHLY DROP</div>
+    <div class="title">JULY BUILD</div>
+    <div class="sub">What's inside this month's release</div>
+    <div class="list">
+      <div class="item"><div class="dot"></div><span>Blender rig pack — 12 new character rigs</span></div>
+      <div class="item"><div class="dot"></div><span>Short-form export presets tuned for Reels &amp; TikTok</span></div>
+      <div class="item"><div class="dot"></div><span>Monetization playbook — pricing your first commissions</span></div>
+      <div class="item"><div class="dot"></div><span>Live Q&amp;A replay with timestamped chapters</span></div>
+    </div>
+    <div class="counter"><div class="num" id="counterNum">0</div><div class="lbl">Members Onboarded</div></div>
+    <div class="rule"></div>
+    <div class="outro">Watch the full drop <b>&rarr; editentia.com</b></div>
+  </div>
+  <script>
+    // JS-driven counter — exercises the requestAnimationFrame + performance.now hijack
+    const el = document.getElementById('counterNum');
+    const target = 128, startAt = 2600, dur = 1200;
+    function loop(){
+      const t = performance.now();
+      const p = Math.min(1, Math.max(0, (t - startAt) / dur));
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(eased * target);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  <\/script>
+</body></html>`;
+
+/* ================= State ================= */
+const codeArea = document.getElementById('codeArea');
+codeArea.value = SAMPLE_HTML;
+
+const previewFrame = document.getElementById('previewFrame');
+const previewWrap = document.getElementById('previewWrap');
+const previewInner = document.getElementById('previewInner');
+const previewEmpty = document.getElementById('previewEmpty');
+const scrub = document.getElementById('scrub');
+const scrubTime = document.getElementById('scrubTime');
+const btnPlay = document.getElementById('btnPlay');
+const playIcon = document.getElementById('playIcon');
+const btnRender = document.getElementById('btnRender');
+const btnCancel = document.getElementById('btnCancel');
+const btnLoad = document.getElementById('btnLoad');
+
+let compositionReady = false;
+let previewWin = null;
+let playing = false;
+let playRafId = null;
+let playStartReal = 0;
+let playStartVt = 0;
+let cancelRequested = false;
+let rendering = false;
+
+function getSettings(){
+  const [w,h] = document.getElementById('selRes').value.split('x').map(Number);
+  const fps = Number(document.getElementById('selFps').value);
+  const duration = Math.max(0.5, Number(document.getElementById('inDuration').value) || 8);
+  const filename = (document.getElementById('inFilename').value || 'motion-forge-render').replace(/[^a-z0-9\-_]+/gi,'_');
+  return {w,h,fps,duration,filename};
+}
+
+function waitForIframeReady(win, doc){
+  return new Promise(resolve => {
+    const start = Date.now();
+    (function poll(){
+      const fontsReady = doc.fonts ? doc.fonts.ready : Promise.resolve();
+      const imgs = Array.from(doc.images || []);
+      const imgsReady = imgs.every(img => img.complete);
+      if(win.__mfReady && imgsReady){
+        fontsReady.then(()=>resolve()).catch(()=>resolve());
+      } else if(Date.now() - start > 4000){
+        resolve(); // don't block forever
+      } else {
+        setTimeout(poll, 40);
+      }
+    })();
+  });
+}
+
+function buildPreview(){
+  const {w,h,duration} = getSettings();
+  const panelWidth = previewWrap.clientWidth;
+  const scale = panelWidth / w;
+  previewFrame.width = w; previewFrame.height = h;
+  previewFrame.style.width = w+'px';
+  previewFrame.style.height = h+'px';
+  previewFrame.style.transform = 'scale('+scale+')';
+  previewInner.style.width = (w*scale)+'px';
+  previewInner.style.height = (h*scale)+'px';
+  previewWrap.style.height = (h*scale)+'px';
+
+  previewFrame.setAttribute('sandbox','allow-scripts allow-same-origin');
+  const raw = codeArea.value.trim() || SAMPLE_HTML;
+  const injected = injectTimeControl(raw);
+
+  return new Promise((resolve, reject) => {
+    previewFrame.onload = async () => {
+      try{
+        previewWin = previewFrame.contentWindow;
+        await waitForIframeReady(previewWin, previewFrame.contentDocument);
+        previewWin.__mfRenderFrame(0);
+        compositionReady = true;
+        previewEmpty.style.display = 'none';
+        scrub.max = Math.round(duration*1000);
+        scrub.value = 0;
+        updateScrubLabel(0);
+        btnRender.disabled = !supported;
+        resolve();
+      }catch(e){ reject(e); }
+    };
+    previewFrame.srcdoc = injected;
+  });
+}
+
+document.getElementById('btnLoad').addEventListener('click', async () => {
+  log('Loading composition into render frame…');
+  try{
+    await buildPreview();
+    log('Composition loaded and ready.', 'l-ok');
+  }catch(e){
+    log('Failed to load composition: '+e.message, 'l-err');
+  }
+});
+
+document.getElementById('btnSample').addEventListener('click', () => {
+  codeArea.value = SAMPLE_HTML;
+  log('Sample composition loaded into editor.');
+});
+
+document.getElementById('btnClear').addEventListener('click', () => {
+  codeArea.value = '';
+  compositionReady = false;
+  btnRender.disabled = true;
+  previewEmpty.style.display = 'flex';
+});
+
+/* ================= Scrub / preview playback ================= */
+function updateScrubLabel(ms){
+  const {duration} = getSettings();
+  scrubTime.textContent = (ms/1000).toFixed(2)+' / '+duration.toFixed(2)+'s';
+}
+scrub.addEventListener('input', () => {
+  if(!compositionReady) return;
+  const ms = Number(scrub.value);
+  previewWin.__mfRenderFrame(ms);
+  updateScrubLabel(ms);
+});
+btnPlay.addEventListener('click', () => {
+  if(!compositionReady) return;
+  playing = !playing;
+  playIcon.className = playing ? 'fa-solid fa-pause' : 'fa-solid fa-play';
+  if(playing){
+    playStartReal = performance.now();
+    playStartVt = Number(scrub.value);
+    stepPlay();
+  } else if(playRafId){
+    cancelAnimationFrame(playRafId);
+  }
+});
+function stepPlay(){
+  const {duration} = getSettings();
+  const elapsed = performance.now() - playStartReal;
+  let vt = playStartVt + elapsed;
+  if(vt >= duration*1000){
+    vt = 0; playStartVt = 0; playStartReal = performance.now();
+  }
+  previewWin.__mfRenderFrame(vt);
+  scrub.value = vt;
+  updateScrubLabel(vt);
+  if(playing) playRafId = requestAnimationFrame(stepPlay);
+}
+
+/* ================= Frame capture =================
+   ENGINE: native SVG <foreignObject> rasterization — no reimplemented CSS engine.
+   We serialize the LIVE composition DOM into a self-contained SVG document (all
+   stylesheets/fonts/images inlined as data URIs, so nothing needs a network fetch
+   at draw time), wrap it in <foreignObject>, and hand that SVG to a real <img>.
+   The browser's own layout/paint pipeline rasterizes it — the exact same pipeline
+   that renders the live preview — so filters, backdrop-filter, blend modes, masks,
+   clip-path, custom fonts, canvas/video content, all come through untouched. This
+   is the same technique used by dom-to-image / html-to-image / modern-screenshot;
+   the only ceiling left is the browser's own security sandbox (cross-origin assets
+   without CORS can never be pulled into any client-side capture, ever — that's not
+   a capture-engine limitation, it's the same wall getDisplayMedia/canvas hit too).
+
+   Same problem as before still applies to animation state: WAAPI/CSS animation
+   timelines live on the LIVE elements, not in the DOM's HTML, so a naive clone
+   restarts every animation from 0. Fix (unchanged in spirit): read each animated
+   element's live *computed* values for whatever properties its animation/keyframes
+   touch, tag it with a stable id, then stamp those exact values onto the matching
+   element in our serialized clone and kill its animation/transition there. The
+   live document is never mutated beyond the id attribute, so scrubbing/playback
+   keeps working normally between frames. */
+
+let mfIdCounter = 0;
+let mfResourceCache = new Map();   // absolute URL -> data URI (or null on failure), shared across a whole render
+let mfCachedCssText = null;        // fully inlined CSS, computed once per render session
+let mfCachedInheritables = null;   // resolved body background/color/font, computed once per render session
+
+function mfTagAll(doc){
+  doc.querySelectorAll('canvas, video').forEach(el => {
+    if(!el.hasAttribute('data-mf-id')) el.setAttribute('data-mf-id', 'mf'+(mfIdCounter++));
+  });
+}
+
+async function mfUrlToDataURI(url){
+  if(mfResourceCache.has(url)) return mfResourceCache.get(url);
+  try{
+    const res = await fetch(url, {mode:'cors'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const blob = await res.blob();
+    const dataUri = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(new Error('FileReader failed'));
+      r.readAsDataURL(blob);
+    });
+    mfResourceCache.set(url, dataUri);
+    return dataUri;
+  }catch(e){
+    log('Could not inline resource '+url+' — '+e.message+' (needs CORS headers, or export will be missing it)', 'l-warn');
+    mfResourceCache.set(url, null);
+    return null;
+  }
+}
+
+const MF_BLANK = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+// Guaranteed non-null: on a failed fetch (CORS/network/404) this returns an inert
+// transparent placeholder instead of the original URL. That's the whole point —
+// ANY external reference left in the serialized SVG taints the canvas the moment
+// we try to read pixels back out for VideoFrame, so "best effort, leave it be" is
+// not an option here. mfUrlToDataURI already logs which resource failed and why.
+async function mfSafeDataUri(url){
+  const d = await mfUrlToDataURI(url);
+  return d || MF_BLANK;
+}
+
+async function mfInlineCssUrls(cssText, baseUrl){
+  const urlRe = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+  const seen = new Set();
+  let out = cssText;
+  for(const m of cssText.matchAll(urlRe)){
+    const raw = m[2];
+    if(raw.startsWith('data:') || raw.startsWith('#') || seen.has(m[0])) continue;
+    seen.add(m[0]);
+    try{
+      const abs = new URL(raw, baseUrl).href;
+      const dataUri = await mfSafeDataUri(abs);
+      out = out.split(m[0]).join('url("'+dataUri+'")');
+    }catch(e){
+      // not a resolvable URL at all (e.g. malformed) — strip it rather than risk a taint
+      out = out.split(m[0]).join('url("'+MF_BLANK+'")');
+    }
+  }
+  return out;
+}
+
+async function mfProcessCssText(text, baseUrl){
+  const importRe = /@import\s+(?:url\(\s*(['"]?)([^'")]+)\1\s*\)|(['"])([^'"]+)\3)[^;]*;/g;
+  let out = '', last = 0, m;
+  while((m = importRe.exec(text))){
+    out += text.slice(last, m.index);
+    const impUrl = m[2] || m[4];
+    if(impUrl){
+      try{
+        const abs = new URL(impUrl, baseUrl).href;
+        const impText = await (await fetch(abs, {mode:'cors'})).text();
+        out += await mfProcessCssText(impText, abs);
+      }catch(e){
+        log('Could not inline @import '+impUrl+' — '+e.message, 'l-warn');
+      }
+    }
+    last = importRe.lastIndex;
+  }
+  out += text.slice(last);
+  return await mfInlineCssUrls(out, baseUrl);
+}
+
+async function mfCollectCss(doc){
+  const parts = [];
+  const nodes = Array.from(doc.querySelectorAll('style, link[rel="stylesheet"]'));
+  for(const node of nodes){
+    if(node.tagName === 'STYLE'){
+      parts.push(await mfProcessCssText(node.textContent, doc.baseURI));
+    } else if(node.href){
+      try{
+        const text = await (await fetch(node.href, {mode:'cors'})).text();
+        parts.push(await mfProcessCssText(text, node.href));
+      }catch(e){
+        log('Could not inline stylesheet '+node.href+' — '+e.message, 'l-warn');
+      }
+    }
+  }
+  return parts.join('\n');
+}
+
+async function mfInlineImages(root, baseUrl){
+  for(const img of Array.from(root.querySelectorAll('img'))){
+    const src = img.getAttribute('src');
+    if(!src || src.startsWith('data:')) continue;
+    try{
+      img.setAttribute('src', await mfSafeDataUri(new URL(src, baseUrl).href));
+    }catch(e){ img.setAttribute('src', MF_BLANK); }
+  }
+  for(const simg of Array.from(root.querySelectorAll('image'))){
+    const href = simg.getAttribute('href') || simg.getAttributeNS('http://www.w3.org/1999/xlink','href');
+    if(!href || href.startsWith('data:')) continue;
+    try{
+      const dataUri = await mfSafeDataUri(new URL(href, baseUrl).href);
+      simg.setAttribute('href', dataUri);
+      simg.setAttributeNS('http://www.w3.org/1999/xlink','href', dataUri);
+    }catch(e){}
+  }
+}
+
+// Class-based CSS is fully covered by mfCollectCss, but a `style="background-image:
+// url(...)"` attribute — whether authored directly or written by mfApplyFrozen when
+// it stamps a computed value — lives outside any stylesheet and was slipping through
+// un-inlined. Scrub every element's style attribute the same way.
+async function mfInlineInlineStyles(elements, baseUrl){
+  for(const el of elements){
+    const styleAttr = el.getAttribute('style');
+    if(styleAttr && styleAttr.indexOf('url(') !== -1){
+      el.setAttribute('style', await mfInlineCssUrls(styleAttr, baseUrl));
+    }
+  }
+}
+
+// btoa() chokes on non-Latin1 chars and call-stack-overflows on big strings, so
+// encode through TextEncoder and chunk it. This is the whole fix for the taint
+// issue: Chromium/WebKit currently taint the canvas for ANY foreignObject SVG
+// loaded via blob: URL, no matter how fully it's inlined — a data: URI is the
+// one path every browser agrees is origin-clean, unconditionally.
+function mfToBase64(str){
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  const chunk = 0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
+  }
+  return btoa(binary);
+}
+
+// canvas/WebGL/video content has no HTML representation to serialize — snapshot the
+// LIVE element's current pixels every frame and swap it in for the clone's element.
+function mfSnapshotMedia(liveDoc, cloneRoot){
+  liveDoc.querySelectorAll('canvas[data-mf-id], video[data-mf-id]').forEach(live => {
+    const id = live.getAttribute('data-mf-id');
+    const cloneEl = cloneRoot.querySelector('[data-mf-id="'+id+'"]');
+    if(!cloneEl) return;
+    let dataUri = null;
+    try{
+      if(live.tagName === 'CANVAS'){
+        dataUri = live.toDataURL('image/png');
+      } else {
+        const vw = live.videoWidth || live.clientWidth || 1;
+        const vh = live.videoHeight || live.clientHeight || 1;
+        const tmp = document.createElement('canvas');
+        tmp.width = vw; tmp.height = vh;
+        tmp.getContext('2d').drawImage(live, 0, 0, vw, vh);
+        dataUri = tmp.toDataURL('image/png');
+      }
+    }catch(e){
+      log('Could not snapshot '+live.tagName.toLowerCase()+' (tainted by cross-origin content) — it will render blank', 'l-warn');
+      return;
+    }
+    const img = cloneRoot.ownerDocument.createElementNS('http://www.w3.org/1999/xhtml','img');
+    img.setAttribute('src', dataUri);
+    if(cloneEl.className) img.setAttribute('class', cloneEl.className);
+    if(cloneEl.id) img.setAttribute('id', cloneEl.id);
+    const w = live.offsetWidth || live.clientWidth;
+    const h = live.offsetHeight || live.clientHeight;
+    img.setAttribute('style', (cloneEl.getAttribute('style')||'') + ';width:'+w+'px;height:'+h+'px;object-fit:fill;');
+    cloneEl.parentNode.replaceChild(img, cloneEl);
+  });
+}
+
+function mfFreezeAnimations(win){
+  const doc = win.document;
+  const frozen = [];
+  doc.getAnimations().forEach(anim => {
+    const eff = anim.effect;
+    const el = eff && eff.target;
+    if(!el) return;
+    if(!el.hasAttribute('data-mf-id')) el.setAttribute('data-mf-id', 'mf'+(mfIdCounter++));
+    const id = el.getAttribute('data-mf-id');
+    const keyframes = (eff.getKeyframes && eff.getKeyframes()) || [];
+    const props = new Set();
+    keyframes.forEach(kf => Object.keys(kf).forEach(k => {
+      if(k!=='offset' && k!=='easing' && k!=='composite') props.add(k);
+    }));
+    const live = win.getComputedStyle(el);
+    const values = {};
+    props.forEach(p => { try{ values[p] = live[p]; }catch(e){} });
+    frozen.push({id, values});
+  });
+  return frozen;
+}
+
+function mfApplyFrozen(cloneRoot, frozen){
+  frozen.forEach(({id, values}) => {
+    const el = cloneRoot.querySelector('[data-mf-id="'+id+'"]');
+    if(!el) return;
+    Object.keys(values).forEach(p => { try{ el.style[p] = values[p]; }catch(e){} });
+    el.style.animation = 'none';
+    el.style.transition = 'none';
+  });
+}
+
+function mfIsOpaqueColor(c){
+  if(!c || c === 'transparent') return false;
+  const m = /rgba?\(([^)]+)\)/.exec(c);
+  if(!m) return true; // e.g. a named/hex color the browser already resolved
+  const parts = m[1].split(',').map(s => parseFloat(s));
+  return !(parts.length > 3 && parts[3] < 1);
+}
+
+// `html, body { background:#08090b; font-family:... }` are TAG-selector rules —
+// they only ever match the real <html>/<body> elements. captureFrame() has to
+// clone the composition's content into a plain <div> wrapper (foreignObject can't
+// host a whole document), and that div never matched those selectors to begin
+// with, so it renders fully transparent/default-font no matter what class or
+// inline style attribute we copy over. A transparent backdrop looks identical to
+// black in the live preview (a real <body> is still behind it there), but once we
+// flatten a transparent capture into an opaque H.264 VideoFrame the alpha channel
+// is discarded — a translucent overlay color like rgba(0,245,255,.12) meant to
+// sit over black instead reads as fully-saturated opaque cyan, and cyan text on
+// that blown-out backdrop disappears. Resolve the ACTUAL computed background/
+// text/font from the live page once (it won't change frame to frame) and stamp
+// it explicitly onto the wrapper instead of hoping a selector match carries over.
+function mfComputeInheritables(win){
+  const doc = win.document;
+  const bodyCs = win.getComputedStyle(doc.body);
+  const htmlCs = win.getComputedStyle(doc.documentElement);
+  let bg = bodyCs.backgroundColor;
+  if(!mfIsOpaqueColor(bg)) bg = htmlCs.backgroundColor;
+  if(!mfIsOpaqueColor(bg)) bg = '#000000';
+  return { bg, color: bodyCs.color, fontFamily: bodyCs.fontFamily, fontSize: bodyCs.fontSize, lineHeight: bodyCs.lineHeight };
+}
+
+// Computed once per render (fonts/background CSS won't change frame to frame) —
+// doing this per-frame would mean re-fetching every asset 300+ times for nothing.
+async function prepareCaptureSession(win){
+  mfResourceCache = new Map();
+  mfTagAll(win.document);
+  log('Inlining stylesheets, fonts and images for capture…');
+  mfCachedCssText = await mfCollectCss(win.document);
+  mfCachedInheritables = mfComputeInheritables(win);
+}
+
+async function captureFrame(win, w, h){
+  const doc = win.document;
+  mfTagAll(doc);
+  const frozen = mfFreezeAnimations(win);
+
+  const bodyClone = doc.body.cloneNode(true);
+  const wrapper = doc.createElementNS('http://www.w3.org/1999/xhtml','div');
+  wrapper.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
+  if(doc.body.className) wrapper.setAttribute('class', doc.body.className);
+  const bodyStyle = doc.body.getAttribute('style');
+  if(bodyStyle) wrapper.setAttribute('style', bodyStyle);
+  wrapper.style.width = w+'px';
+  wrapper.style.height = h+'px';
+  wrapper.style.margin = '0';
+  wrapper.style.overflow = 'hidden';
+  if(mfCachedInheritables){
+    wrapper.style.backgroundColor = mfCachedInheritables.bg;
+    wrapper.style.color = mfCachedInheritables.color;
+    wrapper.style.fontFamily = mfCachedInheritables.fontFamily;
+    wrapper.style.fontSize = mfCachedInheritables.fontSize;
+    wrapper.style.lineHeight = mfCachedInheritables.lineHeight;
+  }
+
+  const styleEl = doc.createElementNS('http://www.w3.org/1999/xhtml','style');
+  styleEl.textContent = mfCachedCssText || '';
+  wrapper.appendChild(styleEl);
+  while(bodyClone.firstChild) wrapper.appendChild(bodyClone.firstChild);
+
+  mfApplyFrozen(wrapper, frozen);
+  mfSnapshotMedia(doc, wrapper);
+  await mfInlineImages(wrapper, doc.baseURI);
+  await mfInlineInlineStyles([wrapper, ...wrapper.querySelectorAll('*')], doc.baseURI);
+
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  svg.setAttribute('width', w); svg.setAttribute('height', h);
+  svg.setAttribute('viewBox','0 0 '+w+' '+h);
+  const fo = doc.createElementNS('http://www.w3.org/2000/svg','foreignObject');
+  fo.setAttribute('width','100%'); fo.setAttribute('height','100%');
+  fo.appendChild(wrapper);
+  svg.appendChild(fo);
+
+  const xml = new XMLSerializer().serializeToString(svg);
+  const strayRef = xml.match(/url\(\\?["']?(https?:\/\/[^"')]+)/i);
+  if(strayRef){
+    throw new Error('Resource left un-inlined: '+strayRef[1]+' — this would taint the export canvas');
+  }
+  const blobUrl = 'data:image/svg+xml;base64,' + mfToBase64(xml);
+  const img = new Image();
+  img.width = w; img.height = h;
+  await new Promise((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('SVG rasterization failed — an un-inlined cross-origin resource likely tainted the frame'));
+    img.src = blobUrl;
+  });
+  return img;
+}
+
+/* ================= Codec negotiation ================= */
+async function pickVideoConfig(width, height, fps, bitrate){
+  const candidates = ['avc1.640034','avc1.4d0034','avc1.42e01f','avc1.42001f'];
+  for(const codec of candidates){
+    const config = {codec, width, height, bitrate, framerate:fps};
+    try{
+      const result = await VideoEncoder.isConfigSupported(config);
+      if(result.supported) return result.config || config;
+    }catch(e){ /* try next */ }
+  }
+  throw new Error('No H.264 configuration supported by this browser for '+width+'x'+height+'.');
+}
+
+/* ================= Audio pipeline =================
+   CONTRACT: a loaded composition may declare a global window.__mfSoundCues
+   array, populated synchronously at top level (not inside an async/raf
+   callback). Each cue provides its audio via ONE of:
+     - url:    a fetchable URL (http(s), or a `data:audio/...;base64,...` URI)
+     - base64: a raw base64 string (no `data:` prefix needed) — decoded
+               locally with atob(), no network fetch involved
+   e.g.:
+     window.__mfSoundCues = [
+       { atMs: 0,   url: 'https://.../ambient.mp3', volume: 0.2 },
+       { atMs: 480, base64: 'SUQzAwAAAAAfdlRJVDIA...', mime:'audio/mpeg', volume: 0.9 }
+     ];
+   Every cue's audio (fetched or base64-decoded) is turned into an
+   ArrayBuffer, decoded, and mixed into one PCM track spanning the full
+   clip duration via an OfflineAudioContext (real Web Audio decoding/
+   mixing, not reimplemented). The result is encoded to AAC with
+   AudioEncoder (WebCodecs) and muxed as a second track alongside the
+   video. If no cues are declared, or none of them load, or AudioEncoder
+   isn't available, the export falls back to video-only (unchanged
+   behavior) — it never fails the render. */
+
+function base64ToArrayBuffer(b64){
+  // Tolerate a full data: URI as well as a bare base64 string.
+  const comma = b64.indexOf(',');
+  const raw = (b64.startsWith('data:') && comma !== -1) ? b64.slice(comma+1) : b64;
+  const binary = atob(raw.replace(/\s+/g, ''));
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for(let i=0;i<len;i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function buildMixedAudioBuffer(renderWin, durationSec){
+  const cues = (renderWin.__mfSoundCues || []).filter(c => c && (c.url || c.base64));
+  if(!cues.length) return null;
+
+  const sampleRate = 44100;
+  const channels = 2;
+  const totalSamples = Math.max(1, Math.round(durationSec * sampleRate));
+  const offlineCtx = new OfflineAudioContext(channels, totalSamples, sampleRate);
+
+  let usable = 0;
+  for(const cue of cues){
+    const label = cue.base64 ? ('inline base64 cue @ '+(cue.atMs||0)+'ms') : cue.url;
+    try{
+      let arr;
+      if(cue.base64){
+        arr = base64ToArrayBuffer(cue.base64);
+      } else {
+        const res = await fetch(cue.url);
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        arr = await res.arrayBuffer();
+      }
+      const audioBuf = await offlineCtx.decodeAudioData(arr);
+      const src = offlineCtx.createBufferSource();
+      src.buffer = audioBuf;
+      const gain = offlineCtx.createGain();
+      gain.gain.value = (typeof cue.volume === 'number') ? cue.volume : 1;
+      src.connect(gain).connect(offlineCtx.destination);
+      const startAt = Math.max(0, (cue.atMs||0)/1000);
+      src.start(startAt);
+      usable++;
+    }catch(e){
+      log('Could not load sound cue '+label+' — '+e.message+' (skipping this cue)', 'l-warn');
+    }
+  }
+  if(!usable) return null;
+  log('Mixing '+usable+' sound cue(s) into the audio track…', 'l-cyan');
+  return await offlineCtx.startRendering();
+}
+
+async function pickAudioConfig(sampleRate, numberOfChannels, bitrate){
+  const candidates = ['mp4a.40.2'];
+  for(const codec of candidates){
+    const config = {codec, sampleRate, numberOfChannels, bitrate};
+    try{
+      const result = await AudioEncoder.isConfigSupported(config);
+      if(result.supported) return result.config || config;
+    }catch(e){ /* try next */ }
+  }
+  return null;
+}
+
+async function encodeAudioTrack(muxer, audioBuffer){
+  const sampleRate = audioBuffer.sampleRate;
+  const numberOfChannels = audioBuffer.numberOfChannels;
+  const aconfig = await pickAudioConfig(sampleRate, numberOfChannels, 160_000);
+  if(!aconfig){
+    log('No AAC audio configuration supported by this browser — exporting video only.', 'l-warn');
+    return false;
+  }
+
+  const audioEncoder = new AudioEncoder({
+    output:(chunk, meta) => muxer.addAudioChunk(chunk, meta),
+    error:(e) => log('Audio encoder error: '+e.message, 'l-err')
+  });
+  audioEncoder.configure(aconfig);
+
+  const frameSize = 1024; // samples per AAC frame
+  const totalFrames = audioBuffer.length;
+  const channelData = [];
+  for(let c=0;c<numberOfChannels;c++) channelData.push(audioBuffer.getChannelData(c));
+
+  for(let start=0; start<totalFrames; start+=frameSize){
+    const count = Math.min(frameSize, totalFrames-start);
+    const planar = new Float32Array(count*numberOfChannels);
+    for(let c=0;c<numberOfChannels;c++){
+      planar.set(channelData[c].subarray(start, start+count), c*count);
+    }
+    const audioData = new AudioData({
+      format:'f32-planar',
+      sampleRate,
+      numberOfFrames: count,
+      numberOfChannels,
+      timestamp: Math.round(start / sampleRate * 1e6),
+      data: planar
+    });
+    audioEncoder.encode(audioData);
+    audioData.close();
+  }
+  await audioEncoder.flush();
+  audioEncoder.close();
+  return true;
+}
+
+/* ================= Render pipeline ================= */
+document.getElementById('btnRender').addEventListener('click', async () => {
+  if(rendering) return;
+  if(!compositionReady){
+    log('Load a composition before rendering.', 'l-warn');
+    return;
+  }
+  await runRender();
+});
+
+document.getElementById('btnCancel').addEventListener('click', () => {
+  cancelRequested = true;
+  log('Cancel requested — finishing current frame…', 'l-warn');
+});
+
+async function runRender(){
+  rendering = true;
+  cancelRequested = false;
+  playing = false; playIcon.className = 'fa-solid fa-play';
+  btnRender.style.display = 'none';
+  btnCancel.style.display = 'block';
+  document.getElementById('outputPanel').classList.remove('show');
+
+  const {w,h,fps,duration,filename} = getSettings();
+  const totalFrames = Math.round(duration*fps);
+  document.getElementById('statFrames').textContent = totalFrames;
+
+  try{
+    log('Rebuilding composition at export resolution '+w+'×'+h+'…', 'l-cyan');
+    await buildPreview(); // reload fresh at frame 0 so timers/state start clean
+    const renderWin = previewWin;
+
+    const bitrate = Math.min(40_000_000, Math.max(2_000_000, Math.round(w*h*fps*0.08)));
+    log('Negotiating H.264 encoder config…');
+    const vconfig = await pickVideoConfig(w,h,fps,bitrate);
+    log('Using codec '+vconfig.codec+' @ '+(bitrate/1e6).toFixed(1)+' Mbps', 'l-ok');
+
+    let mixedAudio = null;
+    if(typeof AudioEncoder === 'undefined'){
+      log('AudioEncoder unavailable in this browser — exporting video only.', 'l-warn');
+    } else {
+      try{
+        mixedAudio = await buildMixedAudioBuffer(renderWin, duration);
+        if(!mixedAudio) log('No usable sound cues found — exporting video only.', 'l-cyan');
+      }catch(e){
+        log('Audio mix failed: '+e.message+' — exporting video only.', 'l-warn');
+        mixedAudio = null;
+      }
+    }
+
+    const target = new Mp4Muxer.ArrayBufferTarget();
+    const muxerConfig = {
+      target,
+      video:{ codec:'avc', width:w, height:h },
+      fastStart:'in-memory'
+    };
+    if(mixedAudio){
+      muxerConfig.audio = { codec:'aac', numberOfChannels: mixedAudio.numberOfChannels, sampleRate: mixedAudio.sampleRate };
+    }
+    const muxer = new Mp4Muxer.Muxer(muxerConfig);
+    const encoder = new VideoEncoder({
+      output:(chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      error:(e) => log('Encoder error: '+e.message, 'l-err')
+    });
+    encoder.configure(vconfig);
+
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width = w; outCanvas.height = h;
+    const outCtx = outCanvas.getContext('2d');
+
+    await prepareCaptureSession(renderWin);
+    log('Capture pipeline ready.', 'l-ok');
+
+    const frameDurUs = Math.round(1e6/fps);
+    let aborted = false;
+
+    for(let i=0;i<totalFrames;i++){
+      if(cancelRequested){ aborted = true; break; }
+      const t = i*(1000/fps);
+      renderWin.__mfRenderFrame(t);
+      await new Promise(r => setTimeout(r, 0));
+
+      let cap;
+      try{
+        cap = await captureFrame(renderWin, w, h);
+      }catch(e){
+        log('Frame capture failed at frame '+i+': '+e.message, 'l-err');
+        aborted = true; break;
+      }
+      outCtx.fillStyle = (mfCachedInheritables && mfCachedInheritables.bg) || '#000000';
+      outCtx.fillRect(0, 0, w, h);
+      outCtx.drawImage(cap, 0, 0, w, h);
+
+      const frame = new VideoFrame(outCanvas, { timestamp: i*frameDurUs, duration: frameDurUs });
+      encoder.encode(frame, { keyFrame: i % (fps*2) === 0 });
+      frame.close();
+
+      const pct = Math.round(((i+1)/totalFrames)*100);
+      document.getElementById('progressInner').style.width = pct+'%';
+      document.getElementById('progressPct').textContent = pct+'%';
+      document.getElementById('progressText').textContent = 'Rendering frame '+(i+1)+' / '+totalFrames;
+
+      scrub.value = t; updateScrubLabel(t);
+    }
+
+    if(aborted){
+      log(cancelRequested ? 'Render cancelled.' : 'Render aborted due to a capture error.', 'l-warn');
+      document.getElementById('progressText').textContent = 'Cancelled';
+      encoder.close();
+    } else {
+      let audioMuxed = false;
+      if(mixedAudio){
+        document.getElementById('progressText').textContent = 'Encoding audio track…';
+        try{
+          audioMuxed = await encodeAudioTrack(muxer, mixedAudio);
+        }catch(e){
+          log('Audio encoding failed: '+e.message+' — finishing with video only.', 'l-warn');
+          audioMuxed = false;
+        }
+      }
+      document.getElementById('progressText').textContent = 'Finalizing MP4…';
+      await encoder.flush();
+      muxer.finalize();
+      const buffer = target.buffer;
+      const blob = new Blob([buffer], {type:'video/mp4'});
+      const url = URL.createObjectURL(blob);
+      document.getElementById('outputVideo').src = url;
+      const dl = document.getElementById('btnDownload');
+      dl.href = url; dl.download = filename+'.mp4';
+      document.getElementById('outputPanel').classList.add('show');
+      document.getElementById('statSize').textContent = (blob.size/1e6).toFixed(2)+' MB';
+      document.getElementById('progressText').textContent = 'Done';
+      log('Render complete — '+totalFrames+' frames, '+(blob.size/1e6).toFixed(2)+' MB'+(audioMuxed ? ' (with audio track).' : ' (video only, no audio).'), 'l-ok');
+    }
+  }catch(e){
+    log('Render failed: '+e.message, 'l-err');
+    document.getElementById('progressText').textContent = 'Error';
+  }finally{
+    rendering = false;
+    btnRender.style.display = 'flex';
+    btnCancel.style.display = 'none';
+  }
+}
+
+/* ================= Rebuild preview scale on resize / resolution change ================= */
+window.addEventListener('resize', () => { if(compositionReady) buildPreview().catch(()=>{}); });
+document.getElementById('selRes').addEventListener('change', () => { if(compositionReady) buildPreview().catch(()=>{}); });
+
+/* Auto-load the sample composition on first open */
+buildPreview().then(()=> log('Sample composition ready. Press play or scrub the timeline, then Render Video.', 'l-ok')).catch(e => log('Init error: '+e.message, 'l-err'));
+</script>
+
+</body>
+</html>
